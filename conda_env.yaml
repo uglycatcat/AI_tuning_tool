@@ -8,3 +8,4 @@ dependencies:
   - pip
   - pip:
       - anthropic>=0.40,<1
+      - prompt-toolkit>=3.0,<4

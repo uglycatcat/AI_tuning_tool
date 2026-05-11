@@ -1,5 +1,5 @@
 {
-  "LLM_API_KEY": "sk-tj4sP4aqprTftTWUVLEhnw",
+  "LLM_API_KEY": "在此填写密钥",
   "BASE_URL": "https://c.loonaai.cn",
   "MODEL": "claude-sonnet-4-6",
   "MAX_TOKENS": 4096,

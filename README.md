@@ -1,7 +1,9 @@
-**此项目用于测试claude api key的可用性和使用方法**
-以下是当前已有key和官方给出的调用方法：
+**此项目用于测试 Claude API key 的可用性和使用方法。**
+
+Python 终端对话：安装依赖后运行 `python3 chat.py`；模型列表：`python3 chat.py --list-models`。将 `config.example.json` 复制为 `config.json` 并填写密钥（`config.json` 已加入 `.gitignore`，请勿提交密钥）。
+
+以下为官方/渠道给出的 Claude Code 配置方式（请将密钥替换为你自己的）：
 ```
-您好，您的Claude code API  KEY 是：sk-tj4sP4aqprTftTWUVLEhnw
 使用方法：
 使用官方安装方式安装原版Claude code；
 修改Claude code配置文件:
@@ -15,4 +17,3 @@
   }
 }
 ```
-我需要实现能够通过python调用这个api，先做一个简单的demo，实现运行后可以在终端和ai对话
