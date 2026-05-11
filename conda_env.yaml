@@ -1,6 +1,5 @@
-# 创建: conda env create -f conda_env.yaml
-# 更新: conda env update -f conda_env.yaml --prune
-# pip 依赖与 requirements.txt 一致（路径相对本文件所在目录）。
+# conda env create -f conda_env.yaml
+# conda env update -f conda_env.yaml --prune
 name: ai_env
 channels:
   - conda-forge
@@ -8,4 +7,4 @@ dependencies:
   - python>=3.10,<3.14
   - pip
   - pip:
-      - -r requirements.txt
+      - anthropic>=0.40,<1
