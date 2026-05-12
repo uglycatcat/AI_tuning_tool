@@ -1,0 +1,339 @@
+:root {
+  --bg: #0a0a0a;
+  --surface: #141414;
+  --border: #2e2e2e;
+  --text: #f2f2f2;
+  --muted: #9a9a9a;
+  --hover: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.top {
+  flex-shrink: 0;
+  padding: 1rem 1.25rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.top-inner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.top-left {
+  min-width: 0;
+}
+
+.brand-mark {
+  flex-shrink: 0;
+  align-self: flex-end;
+  transform: translateY(0.28rem);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #d4af37;
+  text-shadow: 0 0 14px rgba(212, 175, 55, 0.28);
+}
+
+h1 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 2fr 1fr;
+  grid-template-areas:
+    "chart prompt"
+    "controls response";
+  gap: 1px;
+  background: var(--border);
+}
+
+.cell {
+  background: var(--bg);
+  padding: 0.75rem 1rem;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.cell-chart {
+  grid-area: chart;
+}
+
+.cell-prompt {
+  grid-area: prompt;
+}
+
+.cell-controls {
+  grid-area: controls;
+}
+
+.cell-response {
+  grid-area: response;
+}
+
+.cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  flex-shrink: 0;
+}
+
+.cell-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+
+.cell-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.chart-stats {
+  margin: 0 0 0.4rem;
+  padding: 0.35rem 0.45rem;
+  font-family: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  white-space: pre-wrap;
+  flex-shrink: 0;
+}
+
+.cell-actions {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.pager-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.page-indicator {
+  min-width: 4rem;
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.jump-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.jump-label input {
+  width: 3.8rem;
+}
+
+.check-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.mode-meta {
+  font-size: 0.76rem;
+  color: var(--muted);
+}
+
+.chart-wrap {
+  flex: 1;
+  min-height: 140px;
+  position: relative;
+}
+
+#pid-chart {
+  width: 100%;
+  height: 100%;
+}
+
+.fill {
+  flex: 1;
+  min-height: 120px;
+  width: 100%;
+}
+
+.panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.panel.hidden,
+.panel[hidden] {
+  display: none !important;
+}
+
+.hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+
+.field-row label:first-child {
+  min-width: 4.5rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.field-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+
+.grow {
+  flex: 1;
+  min-width: 120px;
+}
+
+.status {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--text);
+}
+
+textarea,
+input,
+select {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  padding: 0.35rem 0.45rem;
+}
+
+textarea {
+  resize: none;
+}
+
+.btn-primary,
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  border-radius: 2px;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.btn-primary:hover,
+.btn-ghost:hover {
+  border-color: var(--muted);
+  color: var(--hover);
+}
+
+.btn-ghost {
+  font-size: 0.72rem;
+  padding: 0.25rem 0.45rem;
+  color: var(--muted);
+}
+
+.log {
+  margin-top: 0.4rem;
+  max-height: 100px;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+    grid-template-areas:
+      "chart"
+      "controls"
+      "prompt"
+      "response";
+    min-height: auto;
+  }
+
+  .cell {
+    min-height: 200px;
+  }
+
+  .field-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>web_tool</title>
+    <link rel="stylesheet" href="/static/css/base.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+  </head>
+  <body>
+    <header class="top">
+      <div class="top-inner">
+        <div class="top-left">
+          <h1>web_tool</h1>
+          <p class="subtitle">本地开发 · 虚拟 PID / 串口 · 曲线与 LLM 占位</p>
+        </div>
+        <span class="brand-mark" aria-label="作者标记">ANNA</span>
+      </div>
+    </header>
+
+    <main class="layout" id="main-layout">
+      <section class="cell cell-chart" aria-label="曲线">
+        <div class="cell-head">
+          <span class="cell-title">PID 曲线</span>
+          <span class="cell-meta" id="chart-hint">时间窗 10s · 横轴：时间 (s)</span>
+        </div>
+        <pre id="chart-stats" class="chart-stats" aria-live="polite">—</pre>
+        <div class="chart-wrap">
+          <canvas id="pid-chart"></canvas>
+        </div>
+      </section>
+
+      <section class="cell cell-prompt" aria-label="发给 AI 的输入">
+        <div class="cell-head">
+          <span class="cell-title">Prompt</span>
+          <div class="cell-actions">
+            <button type="button" class="btn-ghost" id="btn-llm-pull">拉取</button>
+          </div>
+        </div>
+        <div class="pager-row">
+          <button type="button" class="btn-ghost" id="btn-prompt-prev">上一页</button>
+          <span class="page-indicator" id="prompt-page-indicator">0 / 0</span>
+          <button type="button" class="btn-ghost" id="btn-prompt-next">下一页</button>
+          <label class="jump-label">跳转 <input type="number" id="prompt-page-jump" min="1" step="1" value="1" /></label>
+          <button type="button" class="btn-ghost" id="btn-prompt-jump">前往</button>
+        </div>
+        <textarea
+          id="ta-prompt"
+          class="fill"
+          rows="6"
+          placeholder="接入 tuning_tool 后，这里按页显示每轮发送给 AI 的完整 prompt"
+          readonly
+        ></textarea>
+      </section>
+
+      <section class="cell cell-controls" aria-label="模式与控件">
+        <div class="cell-head">
+          <span class="cell-title">控制</span>
+          <button type="button" class="btn-primary" id="btn-mode-toggle" title="切换模式并重置">模式：虚拟 PID</button>
+        </div>
+
+        <div id="panel-virtual" class="panel">
+          <p class="hint">虚拟 PID（前端仿真，独立于 tuning_tool）</p>
+          <div class="field-row">
+            <label class="check-label">
+              <input type="checkbox" id="vp-enable-tuning" />
+              接入 tuning_tool（下次重启生效）
+            </label>
+            <span class="mode-meta" id="vp-tuning-effective-state">当前：未接入</span>
+          </div>
+          <div class="field-row">
+            <label>目标波形</label>
+            <select id="vp-wave">
+              <option value="sine">正弦</option>
+              <option value="triangle">三角波</option>
+            </select>
+          </div>
+          <div class="field-grid">
+            <label>周期 (s)<input type="number" id="vp-period" step="0.1" value="4" /></label>
+            <label>振幅<input type="number" id="vp-amp" step="0.1" value="10" /></label>
+            <label>偏移<input type="number" id="vp-offset" step="0.1" value="50" /></label>
+            <label>P<input type="number" id="vp-p" step="0.01" value="0.8" /></label>
+            <label>I<input type="number" id="vp-i" step="0.001" value="0.15" /></label>
+            <label>D<input type="number" id="vp-d" step="0.001" value="0.05" /></label>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="btn-primary" id="btn-vp-start">开始</button>
+            <button type="button" class="btn-primary" id="btn-vp-pause">暂停</button>
+            <button type="button" class="btn-primary" id="btn-vp-restart">重启</button>
+          </div>
+          <p class="status" id="vp-status">已停止</p>
+        </div>
+
+        <div id="panel-serial" class="panel hidden">
+          <p class="hint">串口助手（占位，无真实读写）</p>
+          <div class="field-row">
+            <label>端口</label>
+            <select id="serial-ports" aria-label="串口列表"></select>
+            <button type="button" class="btn-primary" id="btn-serial-refresh">刷新</button>
+          </div>
+          <div class="field-row">
+            <label>波特率</label>
+            <select id="serial-baud" aria-label="波特率">
+              <option value="9600">9600</option>
+              <option value="19200">19200</option>
+              <option value="38400">38400</option>
+              <option value="57600">57600</option>
+              <option value="115200" selected>115200</option>
+              <option value="230400">230400</option>
+              <option value="460800">460800</option>
+              <option value="921600">921600</option>
+              <option value="1000000">1000000</option>
+            </select>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="btn-primary" id="btn-serial-connect">连接</button>
+            <button type="button" class="btn-primary" id="btn-serial-disconnect">断开</button>
+          </div>
+          <div class="field-row">
+            <input type="text" id="serial-send-line" class="grow" placeholder="发送行（仍为 501 占位）" />
+            <button type="button" class="btn-primary" id="btn-serial-send">发送</button>
+          </div>
+          <pre class="log" id="serial-log"></pre>
+        </div>
+      </section>
+
+      <section class="cell cell-response" aria-label="AI 输出">
+        <div class="cell-head">
+          <span class="cell-title">Response</span>
+        </div>
+        <div class="pager-row">
+          <button type="button" class="btn-ghost" id="btn-response-prev">上一页</button>
+          <span class="page-indicator" id="response-page-indicator">0 / 0</span>
+          <button type="button" class="btn-ghost" id="btn-response-next">下一页</button>
+          <label class="jump-label">跳转 <input type="number" id="response-page-jump" min="1" step="1" value="1" /></label>
+          <button type="button" class="btn-ghost" id="btn-response-jump">前往</button>
+        </div>
+        <textarea
+          id="ta-response"
+          class="fill"
+          rows="6"
+          placeholder="接入 tuning_tool 后，这里按页显示 parser 处理后的每轮输出"
+          readonly
+        ></textarea>
+      </section>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,648 @@
+(() => {
+  const $ = (id) => document.getElementById(id);
+
+  const WINDOW_S = 10;
+  /** 仿真步长 (s)，100Hz */
+  const SIM_DT = 0.01;
+  /** 速度环时间常数 (s)：实际速度一阶跟上 PID 给出的速度指令 */
+  const TAU_V = 0.08;
+  const TUNING_TOTAL_ROUNDS = 3;
+  const TUNING_SAMPLE_INTERVAL_S = 0.1;
+  const TUNING_ROUND_DURATION_S = 4.0;
+
+  let mode = "virtual"; // "virtual" | "serial"
+  let chart;
+  /** @type {number} */
+  let simTimerId = 0;
+  let simT = 0;
+  let simY = 0;
+  let simV = 0;
+  let simLastVCmd = 0;
+  let simInt = 0;
+  /** @type {number | null} */
+  let simPrevE = null;
+  const bufTarget = [];
+  const bufActual = [];
+  /** 位置误差 r−y，与右纵轴对齐 */
+  const bufError = [];
+  const tuningState = {
+    pendingEnabled: false,
+    effectiveEnabled: false,
+    running: false,
+    roundIndex: 0,
+    roundStartT: null,
+    sampleLastT: null,
+    samples: [],
+    promptPages: [],
+    responsePages: [],
+    promptPageIndex: -1,
+    responsePageIndex: -1,
+    busy: false,
+  };
+
+  const api = async (path, opts = {}) => {
+    const res = await fetch(path, {
+      headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      ...opts,
+    });
+    const text = await res.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = text;
+    }
+    if (!res.ok) {
+      const err = new Error(typeof data === "object" && data && data.detail ? data.detail : res.statusText);
+      err.status = res.status;
+      err.body = data;
+      throw err;
+    }
+    return data;
+  };
+
+  const readFloat = (id, fallback) => {
+    const v = parseFloat(String($(id).value || ""));
+    return Number.isFinite(v) ? v : fallback;
+  };
+
+  const readInt = (id, fallback) => {
+    const v = parseInt(String($(id).value || ""), 10);
+    return Number.isFinite(v) ? v : fallback;
+  };
+
+  const setPageText = (kind, text) => {
+    if (kind === "prompt") {
+      $("ta-prompt").value = text || "";
+      return;
+    }
+    $("ta-response").value = text || "";
+  };
+
+  const updatePageUI = (kind) => {
+    const pages = kind === "prompt" ? tuningState.promptPages : tuningState.responsePages;
+    const idxKey = kind === "prompt" ? "promptPageIndex" : "responsePageIndex";
+    const currentIndex = tuningState[idxKey];
+    const total = pages.length;
+    const display = total ? currentIndex + 1 : 0;
+    $(`${kind}-page-indicator`).textContent = `${display} / ${total}`;
+    $(`${kind}-page-jump`).value = String(Math.max(1, display || 1));
+    setPageText(kind, total ? pages[currentIndex] : "");
+  };
+
+  const setPageIndex = (kind, nextIndex) => {
+    const pages = kind === "prompt" ? tuningState.promptPages : tuningState.responsePages;
+    const idxKey = kind === "prompt" ? "promptPageIndex" : "responsePageIndex";
+    if (!pages.length) {
+      tuningState[idxKey] = -1;
+      updatePageUI(kind);
+      return;
+    }
+    const maxIndex = pages.length - 1;
+    tuningState[idxKey] = Math.max(0, Math.min(maxIndex, nextIndex));
+    updatePageUI(kind);
+  };
+
+  const pushPage = (kind, text) => {
+    const pages = kind === "prompt" ? tuningState.promptPages : tuningState.responsePages;
+    pages.push(text || "");
+    setPageIndex(kind, pages.length - 1);
+  };
+
+  const clearPagedLogs = () => {
+    tuningState.promptPages = [];
+    tuningState.responsePages = [];
+    tuningState.promptPageIndex = -1;
+    tuningState.responsePageIndex = -1;
+    updatePageUI("prompt");
+    updatePageUI("response");
+  };
+
+  const setReadonlyTextareas = (readonly) => {
+    $("ta-prompt").readOnly = readonly;
+    $("ta-response").readOnly = readonly;
+  };
+
+  const updateTuningEffectiveLabel = () => {
+    const pending = tuningState.pendingEnabled ? "接入" : "未接入";
+    const current = tuningState.effectiveEnabled ? "接入" : "未接入";
+    $("vp-tuning-effective-state").textContent = `当前：${current} · 待生效：${pending}`;
+  };
+
+  const targetValue = (t, wave, period, amp, offset) => {
+    const T = Math.abs(period) > 1e-6 ? Math.abs(period) : 1e-6;
+    const ph = (t % T) / T;
+    if (wave === "triangle") {
+      const tri = ph < 0.5 ? -1 + 4 * ph : 3 - 4 * ph;
+      return offset + amp * tri;
+    }
+    return offset + amp * Math.sin((2 * Math.PI * t) / T);
+  };
+
+  const trimBuffers = (tNow) => {
+    const tMin = tNow - WINDOW_S - 2 * SIM_DT;
+    while (bufTarget.length && bufTarget[0].x < tMin) bufTarget.shift();
+    while (bufActual.length && bufActual[0].x < tMin) bufActual.shift();
+    while (bufError.length && bufError[0].x < tMin) bufError.shift();
+  };
+
+  const syncChartBuffers = () => {
+    if (!chart) return;
+    chart.data.datasets[0].data = bufTarget;
+    chart.data.datasets[1].data = bufActual;
+    chart.data.datasets[2].data = bufError;
+  };
+
+  const updateChartStats = () => {
+    const el = $("chart-stats");
+    if (!el) return;
+    if (!bufError.length) {
+      el.textContent = "误差统计：—（无数据）";
+      return;
+    }
+    const abs = bufError.map((p) => Math.abs(p.y));
+    const last = bufError[bufError.length - 1].y;
+    const meanAbs = abs.reduce((a, b) => a + b, 0) / abs.length;
+    const maxAbs = abs.reduce((a, b) => Math.max(a, b), 0);
+    el.textContent = [
+      `当前误差 e=r−y：${last.toFixed(3)}`,
+      `窗内平均 |e|：${meanAbs.toFixed(3)}`,
+      `窗内最大 |e|：${maxAbs.toFixed(3)}`,
+      `样本点：${bufError.length}`,
+    ].join("\n");
+  };
+
+  const ensureChart = () => {
+    const canvas = $("pid-chart");
+    if (chart) return;
+    chart = new Chart(canvas, {
+      type: "line",
+      data: {
+        datasets: [
+          {
+            label: "目标",
+            data: bufTarget,
+            yAxisID: "y",
+            borderColor: "#5ec8e8",
+            borderWidth: 1.75,
+            borderDash: [10, 5],
+            tension: 0.2,
+            pointRadius: 0,
+            parsing: false,
+          },
+          {
+            label: "实际",
+            data: bufActual,
+            yAxisID: "y",
+            borderColor: "#e8c27a",
+            borderWidth: 2.35,
+            tension: 0.18,
+            pointRadius: 0,
+            parsing: false,
+          },
+          {
+            label: "误差 (r−y)",
+            data: bufError,
+            yAxisID: "y1",
+            borderColor: "#c89ef0",
+            borderWidth: 1.6,
+            borderDash: [4, 4],
+            tension: 0.12,
+            pointRadius: 0,
+            parsing: false,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: "nearest", intersect: false },
+        scales: {
+          x: {
+            type: "linear",
+            title: { display: true, text: "时间 (s)", color: "#9a9a9a" },
+            ticks: { color: "#9a9a9a", maxTicksLimit: 8 },
+            grid: { color: "#2e2e2e" },
+          },
+          y: {
+            position: "left",
+            title: { display: true, text: "位置", color: "#9a9a9a" },
+            ticks: { color: "#9a9a9a" },
+            grid: { color: "#2e2e2e" },
+          },
+          y1: {
+            type: "linear",
+            position: "right",
+            title: { display: true, text: "误差", color: "#c89ef0" },
+            ticks: { color: "#c4a8e0" },
+            grid: { drawOnChartArea: false },
+          },
+        },
+        plugins: {
+          legend: { labels: { color: "#e0e0e0" } },
+        },
+      },
+    });
+  };
+
+  const setChartWindow = (tNow) => {
+    if (!chart) return;
+    chart.options.scales.x.min = tNow - WINDOW_S;
+    chart.options.scales.x.max = tNow;
+  };
+
+  const updateChartSerialEmpty = () => {
+    ensureChart();
+    bufTarget.length = 0;
+    bufActual.length = 0;
+    bufError.length = 0;
+    syncChartBuffers();
+    chart.options.scales.x.min = undefined;
+    chart.options.scales.x.max = undefined;
+    chart.update();
+    updateChartStats();
+  };
+
+  const simReset = () => {
+    simT = 0;
+    simY = 0;
+    simV = 0;
+    simLastVCmd = 0;
+    simInt = 0;
+    simPrevE = null;
+    bufTarget.length = 0;
+    bufActual.length = 0;
+    bufError.length = 0;
+  };
+
+  const resetRoundSampler = () => {
+    tuningState.roundStartT = null;
+    tuningState.sampleLastT = null;
+    tuningState.samples = [];
+  };
+
+  const resetTuningRuntime = () => {
+    tuningState.running = false;
+    tuningState.roundIndex = 0;
+    tuningState.busy = false;
+    resetRoundSampler();
+  };
+
+  /**
+   * 固定步长积分一步（100Hz 调用）。
+   * 外环：位置误差 e=r-y → PID 得到速度指令 v_cmd。
+   * 内环：实际速度 v 一阶跟上 v_cmd；位置 y 由 v 积分。
+   */
+  const simStep = (dt) => {
+    const wave = $("vp-wave").value === "triangle" ? "triangle" : "sine";
+    const period = readFloat("vp-period", 4);
+    const amp = readFloat("vp-amp", 10);
+    const offset = readFloat("vp-offset", 50);
+    const P = readFloat("vp-p", 0.8);
+    const I = readFloat("vp-i", 0.15);
+    const D = readFloat("vp-d", 0.05);
+
+    const r = targetValue(simT, wave, period, amp, offset);
+    const e = r - simY;
+    simInt += e * dt;
+    const dedt = simPrevE === null || dt < 1e-12 ? 0 : (e - simPrevE) / dt;
+    simPrevE = e;
+
+    const vCmd = P * e + I * simInt + D * dedt;
+    simLastVCmd = vCmd;
+
+    simV += ((vCmd - simV) / TAU_V) * dt;
+    simY += simV * dt;
+
+    const ePlot = r - simY;
+    bufTarget.push({ x: simT, y: r });
+    bufActual.push({ x: simT, y: simY });
+    bufError.push({ x: simT, y: ePlot });
+    trimBuffers(simT);
+    simT += dt;
+  };
+
+  const setPidInputs = (pid) => {
+    if (!pid || typeof pid !== "object") return;
+    if (Number.isFinite(pid.p)) $("vp-p").value = String(pid.p);
+    if (Number.isFinite(pid.i)) $("vp-i").value = String(pid.i);
+    if (Number.isFinite(pid.d)) $("vp-d").value = String(pid.d);
+  };
+
+  const buildSampleRow = () => {
+    const nowMs = simT * 1000;
+    const setpoint = bufTarget.length ? bufTarget[bufTarget.length - 1].y : 0;
+    const input = simY;
+    const error = setpoint - input;
+    return {
+      timestamp: nowMs,
+      setpoint,
+      input,
+      pwm: simLastVCmd,
+      error,
+      p: readFloat("vp-p", 0.8),
+      i: readFloat("vp-i", 0.15),
+      d: readFloat("vp-d", 0.05),
+    };
+  };
+
+  const runTuningRound = async (samples, roundIndex) => {
+    const payload = {
+      round_index: roundIndex,
+      samples,
+      current_pid: {
+        p: readFloat("vp-p", 0.8),
+        i: readFloat("vp-i", 0.15),
+        d: readFloat("vp-d", 0.05),
+      },
+    };
+    return api("/api/debug/virtual-round", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+  };
+
+  const markRoundDone = () => {
+    tuningState.roundIndex += 1;
+    resetRoundSampler();
+    if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) {
+      tuningState.running = false;
+      $("vp-status").textContent = `运行中 · 调参完成（${TUNING_TOTAL_ROUNDS} 轮）`;
+    }
+  };
+
+  const tickTuning = async () => {
+    if (!tuningState.effectiveEnabled || mode !== "virtual") return;
+    if (!simTimerId || tuningState.busy) return;
+    if (!tuningState.running) {
+      tuningState.running = true;
+      tuningState.roundIndex = 0;
+      resetRoundSampler();
+    }
+    if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) return;
+    if (tuningState.roundStartT === null) tuningState.roundStartT = simT;
+    if (tuningState.sampleLastT === null) tuningState.sampleLastT = simT - TUNING_SAMPLE_INTERVAL_S;
+
+    if (simT - tuningState.sampleLastT >= TUNING_SAMPLE_INTERVAL_S) {
+      tuningState.samples.push(buildSampleRow());
+      tuningState.sampleLastT = simT;
+    }
+
+    const elapsed = simT - tuningState.roundStartT;
+    if (elapsed < TUNING_ROUND_DURATION_S) return;
+
+    const thisRound = tuningState.roundIndex + 1;
+    tuningState.busy = true;
+    try {
+      const resp = await runTuningRound(tuningState.samples, thisRound);
+      pushPage("prompt", String(resp.prompt_text || ""));
+      pushPage("response", String(resp.response_text || ""));
+      if (resp && resp.parsed_pid) setPidInputs(resp.parsed_pid);
+      markRoundDone();
+    } catch (e) {
+      pushPage("response", `第 ${thisRound} 轮失败：${e.message}`);
+      markRoundDone();
+    } finally {
+      tuningState.busy = false;
+    }
+  };
+
+  const tickVirtual = () => {
+    simStep(SIM_DT);
+    void tickTuning();
+    ensureChart();
+    syncChartBuffers();
+    setChartWindow(simT);
+    chart.update();
+    updateChartStats();
+    const roundInfo = tuningState.effectiveEnabled
+      ? ` · 调参轮次 ${Math.min(tuningState.roundIndex + 1, TUNING_TOTAL_ROUNDS)}/${TUNING_TOTAL_ROUNDS}`
+      : "";
+    $("vp-status").textContent = `运行中 · t=${simT.toFixed(2)}s · y=${simY.toFixed(2)} · v=${simV.toFixed(2)}${roundInfo}`;
+    $("chart-hint").textContent = `虚拟 PID · 三曲线 · 双纵轴 · 100Hz · Δt=${SIM_DT}s · 窗 ${WINDOW_S}s`;
+  };
+
+  const stopVirtualLoop = () => {
+    if (simTimerId) clearInterval(simTimerId);
+    simTimerId = 0;
+  };
+
+  const appendSerialLog = (line) => {
+    const el = $("serial-log");
+    if (!el) return;
+    el.textContent += `${line}\n`;
+    el.scrollTop = el.scrollHeight;
+  };
+
+  const loadPorts = async () => {
+    const data = await api("/api/serial/ports");
+    const sel = $("serial-ports");
+    sel.innerHTML = "";
+    const ports = (data && data.ports) || [];
+    if (!ports.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "（无端口 · 占位）";
+      sel.appendChild(opt);
+      return;
+    }
+    for (const p of ports) {
+      const opt = document.createElement("option");
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
+    }
+  };
+
+  const refreshSerialStatus = async () => {
+    try {
+      const s = await api("/api/serial/status");
+      appendSerialLog(`[status] ${s.status}: ${s.message}`);
+    } catch (e) {
+      appendSerialLog(`[status] ${e.message}`);
+    }
+  };
+
+  const pullLlm = async () => {
+    const d = await api("/api/debug/llm");
+    clearPagedLogs();
+    if (d.prompt) pushPage("prompt", d.prompt);
+    if (d.response) pushPage("response", d.response);
+  };
+
+  const applyModeUI = () => {
+    const isVirtual = mode === "virtual";
+    $("panel-virtual").classList.toggle("hidden", !isVirtual);
+    $("panel-serial").classList.toggle("hidden", isVirtual);
+    $("btn-mode-toggle").textContent = isVirtual ? "模式：虚拟 PID" : "模式：串口";
+    setReadonlyTextareas(true);
+    if (isVirtual) {
+      $("chart-hint").textContent = `虚拟 PID · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
+      updateTuningEffectiveLabel();
+    } else {
+      $("chart-hint").textContent = "串口模式：暂无曲线数据（占位）";
+    }
+  };
+
+  const fullResetForModeSwitch = () => {
+    stopVirtualLoop();
+    simReset();
+    resetTuningRuntime();
+    $("vp-status").textContent = "已停止";
+    $("serial-log").textContent = "";
+    clearPagedLogs();
+    if (mode === "serial") {
+      updateChartSerialEmpty();
+    } else {
+      ensureChart();
+      syncChartBuffers();
+      chart.options.scales.x.min = 0;
+      chart.options.scales.x.max = WINDOW_S;
+      chart.update();
+      updateChartStats();
+    }
+  };
+
+  const toggleMode = () => {
+    mode = mode === "virtual" ? "serial" : "virtual";
+    fullResetForModeSwitch();
+    applyModeUI();
+  };
+
+  const init = async () => {
+    ensureChart();
+    simReset();
+    clearPagedLogs();
+    resetTuningRuntime();
+    syncChartBuffers();
+    chart.options.scales.x.min = 0;
+    chart.options.scales.x.max = WINDOW_S;
+    chart.update();
+    updateChartStats();
+    $("chart-hint").textContent = `虚拟 PID · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
+    tuningState.pendingEnabled = Boolean($("vp-enable-tuning").checked);
+    tuningState.effectiveEnabled = false;
+    applyModeUI();
+
+    $("btn-mode-toggle").addEventListener("click", () => toggleMode());
+    $("vp-enable-tuning").addEventListener("change", () => {
+      tuningState.pendingEnabled = Boolean($("vp-enable-tuning").checked);
+      updateTuningEffectiveLabel();
+    });
+
+    $("btn-vp-start").addEventListener("click", () => {
+      if (mode !== "virtual") return;
+      if (simTimerId) return;
+      if (tuningState.effectiveEnabled) {
+        resetTuningRuntime();
+      }
+      $("vp-status").textContent = "运行中";
+      simTimerId = setInterval(tickVirtual, Math.round(1000 * SIM_DT));
+    });
+
+    $("btn-vp-pause").addEventListener("click", () => {
+      stopVirtualLoop();
+      $("vp-status").textContent = "已暂停";
+    });
+
+    $("btn-vp-restart").addEventListener("click", () => {
+      stopVirtualLoop();
+      simReset();
+      resetTuningRuntime();
+      clearPagedLogs();
+      tuningState.effectiveEnabled = tuningState.pendingEnabled;
+      updateTuningEffectiveLabel();
+      $("vp-status").textContent = "已停止";
+      ensureChart();
+      syncChartBuffers();
+      chart.options.scales.x.min = 0;
+      chart.options.scales.x.max = WINDOW_S;
+      chart.update();
+      updateChartStats();
+    });
+
+    $("btn-serial-refresh").addEventListener("click", async () => {
+      try {
+        await loadPorts();
+        appendSerialLog("[refresh] 已刷新端口列表");
+      } catch (e) {
+        appendSerialLog(`[refresh] ${e.message}`);
+      }
+    });
+
+    $("btn-serial-connect").addEventListener("click", async () => {
+      const port = $("serial-ports").value || "";
+      const baudrate = parseInt(String($("serial-baud").value || "115200"), 10) || 115200;
+      try {
+        const r = await api("/api/serial/connect", {
+          method: "POST",
+          body: JSON.stringify({ port, baudrate }),
+        });
+        appendSerialLog(`[connect] ${JSON.stringify(r)}`);
+      } catch (e) {
+        appendSerialLog(`[connect] ${e.message}`);
+      }
+    });
+
+    $("btn-serial-disconnect").addEventListener("click", async () => {
+      try {
+        const r = await api("/api/serial/disconnect", { method: "POST" });
+        appendSerialLog(`[disconnect] ${JSON.stringify(r)}`);
+      } catch (e) {
+        appendSerialLog(`[disconnect] ${e.message}`);
+      }
+    });
+
+    $("btn-serial-send").addEventListener("click", async () => {
+      const line = $("serial-send-line").value || "";
+      try {
+        await api("/api/serial/send", {
+          method: "POST",
+          body: JSON.stringify({ line }),
+        });
+        appendSerialLog("[send] 意外成功");
+      } catch (e) {
+        appendSerialLog(`[send] ${e.status || ""} ${e.message}`);
+      }
+    });
+
+    $("btn-llm-pull").addEventListener("click", async () => {
+      try {
+        await pullLlm();
+      } catch (e) {
+        pushPage("prompt", `拉取失败：${e.message}`);
+      }
+    });
+
+    $("btn-prompt-prev").addEventListener("click", () => {
+      setPageIndex("prompt", tuningState.promptPageIndex - 1);
+    });
+    $("btn-prompt-next").addEventListener("click", () => {
+      setPageIndex("prompt", tuningState.promptPageIndex + 1);
+    });
+    $("btn-prompt-jump").addEventListener("click", () => {
+      const page = readInt("prompt-page-jump", 1);
+      setPageIndex("prompt", page - 1);
+    });
+    $("btn-response-prev").addEventListener("click", () => {
+      setPageIndex("response", tuningState.responsePageIndex - 1);
+    });
+    $("btn-response-next").addEventListener("click", () => {
+      setPageIndex("response", tuningState.responsePageIndex + 1);
+    });
+    $("btn-response-jump").addEventListener("click", () => {
+      const page = readInt("response-page-jump", 1);
+      setPageIndex("response", page - 1);
+    });
+
+    await loadPorts();
+    await pullLlm();
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();

@@ -1,0 +1,31 @@
+========================================================================
+captured_at: 2026-05-12T18:07:49+08:00
+bytes_utf8: 2839
+chars: 2839
+========================================================================
+
+--- raw_paste (verbatim below) ---
+
+{
+  "thought_process": "This is the first tuning round. Analyzing current state: P=0.8, I=0.005, D=0.0. The system shows OVERSHOOTING status with 11.2% overshoot, which exceeds the 5% target. Steady-state error is 2.75, mean error is 5.65, max error is 9.42. The time series shows a clear oscillating pattern - the signal swings from ~52.5 down to ~44.9 then back up to ~54.7, crossing the setpoint of 49.215 twice. This is a sustained oscillation/hunting behavior. The overshoot is 11.2% which is too high. The system is in Phase 1 (P adjustment) since we need to first stabilize the P response. Current P=0.8 appears to be causing sustained oscillation - the system keeps overshooting and hunting. The oscillation pattern is symmetric and growing, suggesting P is actually too high for this system, causing the underdamped response. However, looking more carefully: the error swings from -8.4 to +9.4, indicating the system is oscillating around the setpoint. With only 2 zero crossings in the window, this could be the initial transient response rather than limit cycling. The PWM output is bounded between about -6.8 and +7.6, suggesting the actuator may be near saturation limits. Given conservative hardware strategy: I should reduce P to dampen the oscillation, and also reduce I (which at 0.005 is very small but could still contribute to wind-up during oscillations). The guardrail says keep P within ~3x current value (so max 2.4) and I within ~4x (so max 0.02). Since overshoot is 11.2% and oscillating, I should reduce P. Current P=0.8, reducing to about 0.5-0.6 would be appropriate. I'll reduce P to 0.55 to dampen the response, keep I very small at 0.003 (slightly reduced to minimize integral windup during oscillation), and keep D=0.",
+  "analysis_summary": "First round analysis. System at P=0.8, I=0.005, D=0.0 shows 11.2% overshoot with sustained oscillation (OVERSHOOTING, 2 zero crossings). Time series confirms underdamped hunting: signal oscillates from ~52.5 down to ~44.9 then up to ~54.7, with amplitude around setpoint 49.215. PWM swings between -6.8 and +7.6 (near saturation). Mean error 5.65, steady-state error 2.75 indicate the system has not settled. The current P is too aggressive for this plant, causing the underdamped oscillatory response. Phase 1 action: reduce P to dampen oscillation before considering I adjustment.",
+  "tuning_action": "Reduce P from 0.8 to 0.55 to dampen the underdamped oscillatory response and bring overshoot below 5%. Slightly reduce I from 0.005 to 0.003 to minimize integral windup contribution during oscillations. Keep D=0. This conservative reduction should improve damping while maintaining response speed. Next round: assess if oscillation is reduced; if system is too slow, gradually increase P again.",
+  "p": 0.55,
+  "i": 0.003,
+  "d": 0.0,
+  "status": "TUNING"
+}
+
+========================================================================
+--- parse_probe (for later routing; not authoritative) ---
+
+--- strict ---
+{
+  "thought_process": "This is the first tuning round. Analyzing current state: P=0.8, I=0.005, D=0.0. The system shows OVERSHOOTING status with 11.2% overshoot, which exceeds the 5% target. Steady-state error is 2.75, mean error is 5.65, max error is 9.42. The time series shows a clear oscillating pattern - the signal swings from ~52.5 down to ~44.9 then back up to ~54.7, crossing the setpoint of 49.215 twice. This is a sustained oscillation/hunting behavior. The overshoot is 11.2% which is too high. The system is in Phase 1 (P adjustment) since we need to first stabilize the P response. Current P=0.8 appears to be causing sustained oscillation - the system keeps overshooting and hunting. The oscillation pattern is symmetric and growing, suggesting P is actually too high for this system, causing the underdamped response. However, looking more carefully: the error swings from -8.4 to +9.4, indicating the system is oscillating around the setpoint. With only 2 zero crossings in the window, this could be the initial transient response rather than limit cycling. The PWM output is bounded between about -6.8 and +7.6, suggesting the actuator may be near saturation limits. Given conservative hardware strategy: I should reduce P to dampen the oscillation, and also reduce I (which at 0.005 is very small but could still contribute to wind-up during oscillations). The guardrail says keep P within ~3x current value (so max 2.4) and I within ~4x (so max 0.02). Since overshoot is 11.2% and oscillating, I should reduce P. Current P=0.8, reducing to about 0.5-0.6 would be appropriate. I'll reduce P to 0.55 to dampen the response, keep I very small at 0.003 (slightly reduced to minimize integral windup during oscillation), and keep D=0.",
+  "analysis_summary": "First round analysis. System at P=0.8, I=0.005, D=0.0 shows 11.2% overshoot with sustained oscillation (OVERSHOOTING, 2 zero crossings). Time series confirms underdamped hunting: signal oscillates from ~52.5 down to ~44.9 then up to ~54.7, with amplitude around setpoint 49.215. PWM swings between -6.8 and +7.6 (near saturation). Mean error 5.65, steady-state error 2.75 indicate the system has not settled. The current P is too aggressive for this plant, causing the underdamped oscillatory response. Phase 1 action: reduce P to dampen oscillation before considering I adjustment.",
+  "tuning_action": "Reduce P from 0.8 to 0.55 to dampen the underdamped oscillatory response and bring overshoot below 5%. Slightly reduce I from 0.005 to 0.003 to minimize integral windup contribution during oscillations. Keep D=0. This conservative reduction should improve damping while maintaining response speed. Next round: assess if oscillation is reduced; if system is too slow, gradually increase P again.",
+  "p": 0.55,
+  "i": 0.003,
+  "d": 0.0,
+  "status": "TUNING"
+}
