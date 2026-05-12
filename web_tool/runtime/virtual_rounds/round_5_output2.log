@@ -1,0 +1,31 @@
+========================================================================
+captured_at: 2026-05-12T18:28:06+08:00
+bytes_utf8: 2581
+chars: 2581
+========================================================================
+
+--- raw_paste (verbatim below) ---
+
+{
+  "thought_process": "Analyzing the progression across rounds: Round 2 P=3.5 showed sustained sinusoidal oscillation (large amplitude ~19 peak-to-peak). Round 3 P=2.5 also showed sustained sinusoidal oscillation (~18 peak-to-peak). Round 4 P=1.5 shows OVERSHOOTING with only 2 zero-crossings, amplitude roughly from ~42.37 to ~57.31, peak-to-peak ~14.94, setpoint ~46.17. The system is still oscillating but the oscillation appears to be decaying somewhat - we see the input going from ~50 down to ~42.37 then back up to ~57.31, which is still a large oscillation. The overshoot is 24.1% which is way above the 5% target. The zero-crossing count is only 2 in this window, suggesting the oscillation may be sustained or slowly decaying. The stable region seems to require even lower P. Looking at the data: at P=3.5 and P=2.5, we had clear sustained oscillations. At P=1.5, we still have 24.1% overshoot and oscillation. The system appears to have a relatively low gain margin. I need to reduce P further to find a stable operating point. The guardrail says keep P within about 3x current value, so range is 0.5 to 4.5. I should reduce P significantly - trying P=0.8 to damp the oscillation. This is about 53% of current P=1.5, which is a meaningful reduction. With P=0.8 the control authority will be lower: max error ~7.66 would give PWM ~6.1, which should reduce the oscillation amplitude. Let me also consider: the time series shows a classic underdamped second-order response. The oscillation period appears to be roughly 2000ms (from trough at ~95460 to next trough visible pattern). This is a slow system. With P=1.5 we still get 24% overshoot. Reducing to P=0.8 should bring overshoot closer to acceptable range. D=0 still appropriate as we are in Phase 1 of P tuning.",
+  "analysis_summary": "All rounds at P=2.5 and P=3.5 showed sustained sinusoidal oscillations. At P=1.5 the system still oscillates with 24.1% overshoot and 2 zero-crossings, amplitude ~14.9 peak-to-peak (42.4 to 57.3) around setpoint 46.17. PWM swings between about -12.7 and +11.6, indicating the controller is hitting significant output. The system has a low gain margin and requires P well below 1.5 to achieve stable, non-oscillating behavior. Still in Phase 1 (P-only tuning), I=0, D=0.",
+  "tuning_action": "Reduce P from 1.5 to 0.8 (about 53% of current). This should significantly reduce overshoot and oscillation amplitude. Keep I=0 and D=0 per Phase 1 protocol. Observe whether oscillation damps out and overshoot falls below 5%.",
+  "p": 0.8,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}
+
+========================================================================
+--- parse_probe (for later routing; not authoritative) ---
+
+--- strict ---
+{
+  "thought_process": "Analyzing the progression across rounds: Round 2 P=3.5 showed sustained sinusoidal oscillation (large amplitude ~19 peak-to-peak). Round 3 P=2.5 also showed sustained sinusoidal oscillation (~18 peak-to-peak). Round 4 P=1.5 shows OVERSHOOTING with only 2 zero-crossings, amplitude roughly from ~42.37 to ~57.31, peak-to-peak ~14.94, setpoint ~46.17. The system is still oscillating but the oscillation appears to be decaying somewhat - we see the input going from ~50 down to ~42.37 then back up to ~57.31, which is still a large oscillation. The overshoot is 24.1% which is way above the 5% target. The zero-crossing count is only 2 in this window, suggesting the oscillation may be sustained or slowly decaying. The stable region seems to require even lower P. Looking at the data: at P=3.5 and P=2.5, we had clear sustained oscillations. At P=1.5, we still have 24.1% overshoot and oscillation. The system appears to have a relatively low gain margin. I need to reduce P further to find a stable operating point. The guardrail says keep P within about 3x current value, so range is 0.5 to 4.5. I should reduce P significantly - trying P=0.8 to damp the oscillation. This is about 53% of current P=1.5, which is a meaningful reduction. With P=0.8 the control authority will be lower: max error ~7.66 would give PWM ~6.1, which should reduce the oscillation amplitude. Let me also consider: the time series shows a classic underdamped second-order response. The oscillation period appears to be roughly 2000ms (from trough at ~95460 to next trough visible pattern). This is a slow system. With P=1.5 we still get 24% overshoot. Reducing to P=0.8 should bring overshoot closer to acceptable range. D=0 still appropriate as we are in Phase 1 of P tuning.",
+  "analysis_summary": "All rounds at P=2.5 and P=3.5 showed sustained sinusoidal oscillations. At P=1.5 the system still oscillates with 24.1% overshoot and 2 zero-crossings, amplitude ~14.9 peak-to-peak (42.4 to 57.3) around setpoint 46.17. PWM swings between about -12.7 and +11.6, indicating the controller is hitting significant output. The system has a low gain margin and requires P well below 1.5 to achieve stable, non-oscillating behavior. Still in Phase 1 (P-only tuning), I=0, D=0.",
+  "tuning_action": "Reduce P from 1.5 to 0.8 (about 53% of current). This should significantly reduce overshoot and oscillation amplitude. Keep I=0 and D=0 per Phase 1 protocol. Observe whether oscillation damps out and overshoot falls below 5%.",
+  "p": 0.8,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}

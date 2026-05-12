@@ -1,0 +1,33 @@
+========================================================================
+captured_at: 2026-05-12T18:30:08+08:00
+bytes_utf8: 2835
+chars: 2832
+========================================================================
+
+--- raw_paste (verbatim below) ---
+
+```json
+{
+  "thought_process": "Reviewing the progression: Rounds 2-5 showed sustained oscillations at P=3.5 down to P=0.8. Round 6 (P=0.5) still showed clear sinusoidal oscillation. Round 7 (P=0.3) still oscillating. Round 8 (P=0.2) now shows STABLE status with only 2 zero crossings. However, the system is clearly not tracking the setpoint well: the input oscillates roughly between 49.0 and 51.75, while the setpoint is 58.27. The mean error is 6.44 and steady-state error estimate is 9.01, meaning the process variable is sitting around 49-51 instead of 58.27. The oscillation at P=0.2 appears to be the system's natural free oscillation rather than PID-induced instability, since the PWM values are very small (-2.1 to +2.1). The system seems to have a large offset from setpoint. With P=0.2, the error of ~9 should produce PWM output of ~1.8, which is clearly insufficient to drive the system to setpoint. I need to increase P substantially to get the system to actually respond toward the setpoint. The key insight is that at P=0.5 and P=0.3, oscillations were observed, but those may have been limit cycles due to the system being near equilibrium with the process variable far from setpoint. Now at P=0.2, stability is achieved but at the cost of essentially no control authority. I should try increasing P back toward 0.5, but the oscillation history suggests the system has a natural frequency and gain margin issues. Actually, looking more carefully: at P=0.5, the input was swinging 47.44 to 54.74 (amplitude ~3.65), and at P=0.2 it's swinging 49.05 to 51.75 (amplitude ~1.35). The oscillations are persistent regardless of P - this might be a system-level oscillation. But the setpoint is 58.27 and the system sits at ~50. With P=0.2, max PWM is only ~2.1, suggesting the actuator is severely limited or the gain is very low. I need more P to drive toward setpoint. Given the oscillation history, I'll try P=0.35 as a cautious increase.",
+  "analysis_summary": "P=0.2 achieves STABLE status (only 2 zero crossings) but with massive steady-state error ~9.0. Process variable oscillates around 49-51 while setpoint is 58.27. Max PWM output is only ±2.1, indicating insufficient control authority. Previous rounds at P=0.3 and P=0.5 showed sinusoidal oscillations. The natural oscillation of the system appears persistent. Need to increase P to drive the system toward setpoint, but must be cautious given oscillation history at P≥0.3.",
+  "tuning_action": "Increase P from 0.2 to 0.35 (within 3x guardrail). This provides more control authority to reduce the large steady-state error (~9.0) while staying below the oscillation-inducing levels seen at P=0.5. I and D remain at 0 per Phase 1 protocol. Monitor closely for return of sustained oscillations.",
+  "p": 0.35,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}
+```
+
+========================================================================
+--- parse_probe (for later routing; not authoritative) ---
+
+--- strict ---
+{
+  "thought_process": "Reviewing the progression: Rounds 2-5 showed sustained oscillations at P=3.5 down to P=0.8. Round 6 (P=0.5) still showed clear sinusoidal oscillation. Round 7 (P=0.3) still oscillating. Round 8 (P=0.2) now shows STABLE status with only 2 zero crossings. However, the system is clearly not tracking the setpoint well: the input oscillates roughly between 49.0 and 51.75, while the setpoint is 58.27. The mean error is 6.44 and steady-state error estimate is 9.01, meaning the process variable is sitting around 49-51 instead of 58.27. The oscillation at P=0.2 appears to be the system's natural free oscillation rather than PID-induced instability, since the PWM values are very small (-2.1 to +2.1). The system seems to have a large offset from setpoint. With P=0.2, the error of ~9 should produce PWM output of ~1.8, which is clearly insufficient to drive the system to setpoint. I need to increase P substantially to get the system to actually respond toward the setpoint. The key insight is that at P=0.5 and P=0.3, oscillations were observed, but those may have been limit cycles due to the system being near equilibrium with the process variable far from setpoint. Now at P=0.2, stability is achieved but at the cost of essentially no control authority. I should try increasing P back toward 0.5, but the oscillation history suggests the system has a natural frequency and gain margin issues. Actually, looking more carefully: at P=0.5, the input was swinging 47.44 to 54.74 (amplitude ~3.65), and at P=0.2 it's swinging 49.05 to 51.75 (amplitude ~1.35). The oscillations are persistent regardless of P - this might be a system-level oscillation. But the setpoint is 58.27 and the system sits at ~50. With P=0.2, max PWM is only ~2.1, suggesting the actuator is severely limited or the gain is very low. I need more P to drive toward setpoint. Given the oscillation history, I'll try P=0.35 as a cautious increase.",
+  "analysis_summary": "P=0.2 achieves STABLE status (only 2 zero crossings) but with massive steady-state error ~9.0. Process variable oscillates around 49-51 while setpoint is 58.27. Max PWM output is only ±2.1, indicating insufficient control authority. Previous rounds at P=0.3 and P=0.5 showed sinusoidal oscillations. The natural oscillation of the system appears persistent. Need to increase P to drive the system toward setpoint, but must be cautious given oscillation history at P≥0.3.",
+  "tuning_action": "Increase P from 0.2 to 0.35 (within 3x guardrail). This provides more control authority to reduce the large steady-state error (~9.0) while staying below the oscillation-inducing levels seen at P=0.5. I and D remain at 0 per Phase 1 protocol. Monitor closely for return of sustained oscillations.",
+  "p": 0.35,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}

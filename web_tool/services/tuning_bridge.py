@@ -72,11 +72,15 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
     raw_payload = payload or {}
     round_index = int(raw_payload.get("round_index") or 1)
     samples = _normalize_samples(raw_payload.get("samples"))
+    history_text_raw = raw_payload.get("history_text")
+    history_text = str(history_text_raw).strip() if history_text_raw is not None else None
+    if history_text == "":
+        history_text = None
     if not samples:
         raise ValueError("samples 为空，无法执行本轮调参。")
 
     csv_path = _write_round_csv(round_index, samples)
-    prompt = build_full_prompt(samples=samples)
+    prompt = build_full_prompt(samples=samples, history_text=history_text)
     prompt_text = _format_prompt_text(prompt["system"], prompt["user"], round_index)
 
     llm_resp = request_once(system=prompt["system"], user=prompt["user"])
@@ -103,6 +107,7 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
         "output2_log_path": str(output2_path),
         "prompt_text": prompt_text,
         "response_text": response_text,
+        "raw_response_text": raw_text,
         "parsed_pid": parsed_pid,
         "model": str(llm_resp.get("model") or ""),
     }

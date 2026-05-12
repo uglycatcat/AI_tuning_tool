@@ -6,7 +6,7 @@
   const SIM_DT = 0.01;
   /** 速度环时间常数 (s)：实际速度一阶跟上 PID 给出的速度指令 */
   const TAU_V = 0.08;
-  const TUNING_TOTAL_ROUNDS = 3;
+  const TUNING_TOTAL_ROUNDS = 10;
   const TUNING_SAMPLE_INTERVAL_S = 0.1;
   const TUNING_ROUND_DURATION_S = 4.0;
 
@@ -37,7 +37,9 @@
     responsePages: [],
     promptPageIndex: -1,
     responsePageIndex: -1,
+    historyRounds: [],
     busy: false,
+    finished: false,
   };
 
   const api = async (path, opts = {}) => {
@@ -114,6 +116,7 @@
     tuningState.responsePages = [];
     tuningState.promptPageIndex = -1;
     tuningState.responsePageIndex = -1;
+    tuningState.historyRounds = [];
     updatePageUI("prompt");
     updatePageUI("response");
   };
@@ -286,6 +289,7 @@
     tuningState.running = false;
     tuningState.roundIndex = 0;
     tuningState.busy = false;
+    tuningState.finished = false;
     resetRoundSampler();
   };
 
@@ -300,8 +304,8 @@
     const amp = readFloat("vp-amp", 10);
     const offset = readFloat("vp-offset", 50);
     const P = readFloat("vp-p", 0.8);
-    const I = readFloat("vp-i", 0.15);
-    const D = readFloat("vp-d", 0.05);
+    const I = readFloat("vp-i", 0);
+    const D = readFloat("vp-d", 0);
 
     const r = targetValue(simT, wave, period, amp, offset);
     const e = r - simY;
@@ -339,22 +343,38 @@
       timestamp: nowMs,
       setpoint,
       input,
-      pwm: simLastVCmd,
+      // 与当前虚拟 PID 的速度状态保持一致。
+      pwm: simV,
       error,
       p: readFloat("vp-p", 0.8),
-      i: readFloat("vp-i", 0.15),
-      d: readFloat("vp-d", 0.05),
+      i: readFloat("vp-i", 0),
+      d: readFloat("vp-d", 0),
     };
+  };
+
+  const buildHistoryText = () => {
+    const recent = tuningState.historyRounds.slice(-3);
+    if (!recent.length) return null;
+    const lines = [];
+    for (const item of recent) {
+      const pid = item.pid || {};
+      lines.push(
+        `Round ${item.round}: PID(P=${Number(pid.p || 0).toFixed(6)}, I=${Number(pid.i || 0).toFixed(6)}, D=${Number(pid.d || 0).toFixed(6)})`
+      );
+      if (item.summary) lines.push(`Summary: ${item.summary}`);
+    }
+    return lines.join("\n");
   };
 
   const runTuningRound = async (samples, roundIndex) => {
     const payload = {
       round_index: roundIndex,
       samples,
+      history_text: buildHistoryText(),
       current_pid: {
         p: readFloat("vp-p", 0.8),
-        i: readFloat("vp-i", 0.15),
-        d: readFloat("vp-d", 0.05),
+        i: readFloat("vp-i", 0),
+        d: readFloat("vp-d", 0),
       },
     };
     return api("/api/debug/virtual-round", {
@@ -368,19 +388,24 @@
     resetRoundSampler();
     if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) {
       tuningState.running = false;
+      tuningState.finished = true;
       $("vp-status").textContent = `运行中 · 调参完成（${TUNING_TOTAL_ROUNDS} 轮）`;
     }
   };
 
   const tickTuning = async () => {
     if (!tuningState.effectiveEnabled || mode !== "virtual") return;
+    if (tuningState.finished) return;
     if (!simTimerId || tuningState.busy) return;
+    if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) {
+      tuningState.running = false;
+      tuningState.finished = true;
+      return;
+    }
     if (!tuningState.running) {
       tuningState.running = true;
-      tuningState.roundIndex = 0;
       resetRoundSampler();
     }
-    if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) return;
     if (tuningState.roundStartT === null) tuningState.roundStartT = simT;
     if (tuningState.sampleLastT === null) tuningState.sampleLastT = simT - TUNING_SAMPLE_INTERVAL_S;
 
@@ -399,6 +424,11 @@
       pushPage("prompt", String(resp.prompt_text || ""));
       pushPage("response", String(resp.response_text || ""));
       if (resp && resp.parsed_pid) setPidInputs(resp.parsed_pid);
+      tuningState.historyRounds.push({
+        round: thisRound,
+        pid: resp.parsed_pid || {},
+        summary: String(resp.raw_response_text || "").replace(/\s+/g, " ").slice(0, 240),
+      });
       markRoundDone();
     } catch (e) {
       pushPage("response", `第 ${thisRound} 轮失败：${e.message}`);

@@ -1,0 +1,31 @@
+========================================================================
+captured_at: 2026-05-12T18:29:15+08:00
+bytes_utf8: 2748
+chars: 2748
+========================================================================
+
+--- raw_paste (verbatim below) ---
+
+{
+  "thought_process": "Analyzing Round 7 with P=0.3, I=0.0, D=0.0. The time series shows a clear sinusoidal oscillation: input swings from ~47.23 up to ~51.36 then back down to ~47.80, with error ranging from about -9.59 to +10.75. Zero crossings = 2, which means the system is still oscillating around the setpoint of 52.03. However, the system is classified as STABLE with only 2 zero crossings. Looking at the data more carefully: the input peaks around 51.36 and never reaches the setpoint of 52.03, meaning there is a sustained oscillation centered well below setpoint. The average error is 6.48 and steady-state error is 2.97. The system is underdamped and oscillating. History: P=3.5 large oscillation, P=2.5 large oscillation, P=1.5 oscillating, P=0.8 oscillating, P=0.5 oscillating, P=0.3 still oscillating with amplitude ~9-10 on error. The system keeps oscillating at all P values tried so far. With P=0.3, the PWM output swings from about -2.9 to +3.2, and the system still oscillates. This suggests the plant has significant natural dynamics (integrating or resonant). The fact that oscillation persists even at P=0.3 with only 2 zero crossings and the system being called STABLE is interesting. The oscillation amplitude is roughly 10 in error units and the system center is around 49.5 input vs setpoint 52.03, meaning there is a large offset. With D=0 and I=0, the system cannot eliminate steady-state error. I need to reduce P further to damp the oscillation, OR the oscillation is inherent to the plant (like a thermal cycling system). Let me try P=0.15 to see if we can get a truly stable non-oscillating response, then introduce a small I to address the large steady-state error. The sustained oscillation even at P=0.3 suggests the system may need an even smaller P or some D damping. Given the conservative hardware approach, I will reduce P slightly to 0.2 to attempt to stop the oscillation first.",
+  "analysis_summary": "Round 7 P=0.3 shows continued sinusoidal oscillation: error swings from -9.59 to +10.75, input ranges 47.23 to 51.36, never reaching setpoint 52.03. Average error 6.48, steady-state error 2.97. Oscillation persists across all P values (3.5 down to 0.3). With only 2 zero crossings the system is borderline stable but still cycling. Large steady-state offset exists because I=0. Priority: first stop oscillation by reducing P further, then introduce small I to close the offset.",
+  "tuning_action": "Reduce P from 0.3 to 0.2 to attempt to damp the persistent oscillation. Keep I=0 and D=0. If oscillation stops at P=0.2, the next step will be to introduce a small I (around 0.01-0.02) to address the large steady-state error of ~3-6 units.",
+  "p": 0.2,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}
+
+========================================================================
+--- parse_probe (for later routing; not authoritative) ---
+
+--- strict ---
+{
+  "thought_process": "Analyzing Round 7 with P=0.3, I=0.0, D=0.0. The time series shows a clear sinusoidal oscillation: input swings from ~47.23 up to ~51.36 then back down to ~47.80, with error ranging from about -9.59 to +10.75. Zero crossings = 2, which means the system is still oscillating around the setpoint of 52.03. However, the system is classified as STABLE with only 2 zero crossings. Looking at the data more carefully: the input peaks around 51.36 and never reaches the setpoint of 52.03, meaning there is a sustained oscillation centered well below setpoint. The average error is 6.48 and steady-state error is 2.97. The system is underdamped and oscillating. History: P=3.5 large oscillation, P=2.5 large oscillation, P=1.5 oscillating, P=0.8 oscillating, P=0.5 oscillating, P=0.3 still oscillating with amplitude ~9-10 on error. The system keeps oscillating at all P values tried so far. With P=0.3, the PWM output swings from about -2.9 to +3.2, and the system still oscillates. This suggests the plant has significant natural dynamics (integrating or resonant). The fact that oscillation persists even at P=0.3 with only 2 zero crossings and the system being called STABLE is interesting. The oscillation amplitude is roughly 10 in error units and the system center is around 49.5 input vs setpoint 52.03, meaning there is a large offset. With D=0 and I=0, the system cannot eliminate steady-state error. I need to reduce P further to damp the oscillation, OR the oscillation is inherent to the plant (like a thermal cycling system). Let me try P=0.15 to see if we can get a truly stable non-oscillating response, then introduce a small I to address the large steady-state error. The sustained oscillation even at P=0.3 suggests the system may need an even smaller P or some D damping. Given the conservative hardware approach, I will reduce P slightly to 0.2 to attempt to stop the oscillation first.",
+  "analysis_summary": "Round 7 P=0.3 shows continued sinusoidal oscillation: error swings from -9.59 to +10.75, input ranges 47.23 to 51.36, never reaching setpoint 52.03. Average error 6.48, steady-state error 2.97. Oscillation persists across all P values (3.5 down to 0.3). With only 2 zero crossings the system is borderline stable but still cycling. Large steady-state offset exists because I=0. Priority: first stop oscillation by reducing P further, then introduce small I to close the offset.",
+  "tuning_action": "Reduce P from 0.3 to 0.2 to attempt to damp the persistent oscillation. Keep I=0 and D=0. If oscillation stops at P=0.2, the next step will be to introduce a small I (around 0.01-0.02) to address the large steady-state error of ~3-6 units.",
+  "p": 0.2,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}

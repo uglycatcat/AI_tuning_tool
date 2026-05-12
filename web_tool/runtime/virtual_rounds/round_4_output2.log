@@ -1,0 +1,31 @@
+========================================================================
+captured_at: 2026-05-12T18:27:24+08:00
+bytes_utf8: 2281
+chars: 2281
+========================================================================
+
+--- raw_paste (verbatim below) ---
+
+{
+  "thought_process": "Analyzing Round 3 data with P=2.5, I=0.0, D=0.0. Setpoint is ~45.74. The time series shows a clear sustained sinusoidal oscillation: the input swings from ~40.99 to ~58.94, giving a peak-to-peak amplitude of roughly 18 units. The system is oscillating symmetrically around approximately 49-50, which is well above the setpoint of 45.74. The oscillation period appears to be about 4000ms (from the data pattern, one full cycle visible). Overshoot is 28.8% and there are only 2 zero crossings, suggesting we are seeing a slow, large-amplitude oscillation. The average error is 3.36 and steady-state error is 4.30, meaning the system is consistently overshooting the setpoint on average. Comparing history: P=2.0 showed oscillation, P=3.5 showed sustained oscillation (worse), P=2.5 still shows sustained oscillation with large amplitude. The oscillation amplitude is very large (~18 units peak-to-peak around a mean that is above setpoint). This indicates P=2.5 is still too high for stable control. The mean of the oscillation appears to be around (40.99+58.94)/2 = 49.97, which is about 4.23 above the setpoint - this DC offset without I term makes sense as the system may have a nonlinearity or the oscillation center is shifted. We need to reduce P further to damp the oscillation. P=2.0 also showed oscillation per Round 1 summary. We need to go lower, perhaps P=1.5 or even P=1.2. Since P=2.0 oscillated and P=2.5 oscillates more, the critical gain appears to be below 2.0. Let me try P=1.5 as a conservative reduction step to see if oscillation amplitude decreases.",
+  "analysis_summary": "All three tested P values (2.0, 3.5, 2.5) produce sustained oscillations. P=3.5 was worst, P=2.5 still shows large 18-unit peak-to-peak oscillation with the oscillation center ~4 units above setpoint. The system is underdamped at all tested gains. Critical gain Ku appears to be below 2.0. Need to reduce P further to find the stable zone before considering I or D.",
+  "tuning_action": "Reduce P from 2.5 to 1.5 to move below the apparent critical gain and dampen the oscillation. Keep I=0 and D=0 to isolate P effect. This is a meaningful reduction (~40%) aimed at finding a stable operating point.",
+  "p": 1.5,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}
+
+========================================================================
+--- parse_probe (for later routing; not authoritative) ---
+
+--- strict ---
+{
+  "thought_process": "Analyzing Round 3 data with P=2.5, I=0.0, D=0.0. Setpoint is ~45.74. The time series shows a clear sustained sinusoidal oscillation: the input swings from ~40.99 to ~58.94, giving a peak-to-peak amplitude of roughly 18 units. The system is oscillating symmetrically around approximately 49-50, which is well above the setpoint of 45.74. The oscillation period appears to be about 4000ms (from the data pattern, one full cycle visible). Overshoot is 28.8% and there are only 2 zero crossings, suggesting we are seeing a slow, large-amplitude oscillation. The average error is 3.36 and steady-state error is 4.30, meaning the system is consistently overshooting the setpoint on average. Comparing history: P=2.0 showed oscillation, P=3.5 showed sustained oscillation (worse), P=2.5 still shows sustained oscillation with large amplitude. The oscillation amplitude is very large (~18 units peak-to-peak around a mean that is above setpoint). This indicates P=2.5 is still too high for stable control. The mean of the oscillation appears to be around (40.99+58.94)/2 = 49.97, which is about 4.23 above the setpoint - this DC offset without I term makes sense as the system may have a nonlinearity or the oscillation center is shifted. We need to reduce P further to damp the oscillation. P=2.0 also showed oscillation per Round 1 summary. We need to go lower, perhaps P=1.5 or even P=1.2. Since P=2.0 oscillated and P=2.5 oscillates more, the critical gain appears to be below 2.0. Let me try P=1.5 as a conservative reduction step to see if oscillation amplitude decreases.",
+  "analysis_summary": "All three tested P values (2.0, 3.5, 2.5) produce sustained oscillations. P=3.5 was worst, P=2.5 still shows large 18-unit peak-to-peak oscillation with the oscillation center ~4 units above setpoint. The system is underdamped at all tested gains. Critical gain Ku appears to be below 2.0. Need to reduce P further to find the stable zone before considering I or D.",
+  "tuning_action": "Reduce P from 2.5 to 1.5 to move below the apparent critical gain and dampen the oscillation. Keep I=0 and D=0 to isolate P effect. This is a meaningful reduction (~40%) aimed at finding a stable operating point.",
+  "p": 1.5,
+  "i": 0.0,
+  "d": 0.0,
+  "status": "TUNING"
+}

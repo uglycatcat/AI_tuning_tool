@@ -28,6 +28,7 @@ class PidBody(BaseModel):
 class VirtualRoundBody(BaseModel):
     round_index: int = 1
     samples: list[dict] = Field(default_factory=list)
+    history_text: str | None = None
     current_pid: PidBody | None = None
 
 
@@ -50,6 +51,7 @@ async def llm_debug_virtual_round(body: VirtualRoundBody) -> dict:
     payload = {
         "round_index": body.round_index,
         "samples": body.samples,
+        "history_text": body.history_text,
         "current_pid": body.current_pid.model_dump() if body.current_pid else None,
     }
     result = await run_in_threadpool(run_virtual_round, payload)
