@@ -1,0 +1,31 @@
+========================================================================
+captured_at: 2026-05-12T15:21:55+08:00
+bytes_utf8: 2427
+chars: 2091
+========================================================================
+
+--- raw_paste (verbatim below) ---
+
+{
+  "thought_process": "This is the first tuning round. Current parameters: P=1.0, I=0.05, D=0.0. System starts at 22.0, setpoint is 100.0. After 4350ms the output has only reached ~54.26, still 45.74 away from setpoint. The response is extremely slow - SLOW_RESPONSE state confirmed with 0 zero-crossings and 0% overshoot. The system is clearly under-driven. PWM has climbed from 120 to 276 but the output is rising very slowly (~1.1 units per 150ms step). This suggests the plant has significant thermal inertia or the gain is very low. Steady-state error estimate is 48.15, which is very large. Since this is Phase 1 (P tuning), I need to increase P significantly. The guardrail allows up to 3x current P, so max P = 3.0. Current P=1.0 is clearly insufficient. The response rate is approximately 1.1 units per 150ms = ~7.3 units/sec. To reach setpoint of 100 from 22 (delta=78) in a reasonable time, we need much faster response. With P=1.0 and error=78, the P-contribution is 78. With P=3.0 and error=78, P-contribution would be 234. The PWM is already at 276 in the latest sample which seems to be within range. However, I need to be conservative per the hardware-safe tuning style. I'll go with P=2.5 (within the 3x guardrail) to substantially improve response speed while staying conservative. I'll keep I very low (reduce slightly or keep same) since we're still in Phase 1. D stays at 0. Actually, I should also consider slightly reducing I to near-zero to properly execute Phase 1 protocol - I=0.05 is already very small so it can stay. Let me set P=2.5, I=0.05, D=0.0. This is a meaningful increase (2.5x) that should significantly improve the rise rate without risking oscillation given the slow thermal-like system behavior.",
+  "analysis_summary": "第一轮调参。系统从初始值22.0出发，4350ms后仅上升至54.26，响应极其缓慢（SLOW_RESPONSE），稳态误差估算48.15，超调量0%。PWM已从120爬升至276，但输出增速仅约1.1单位/150ms。当前P=1.0驱动力严重不足，处于第一阶段（P整定）。无振荡风险，首要问题是响应速度过慢。",
+  "tuning_action": "大幅提升P至2.5（在3x护栏内），以显著加快响应速度。I保持0.05不变（极小值，符合P整定阶段要求）。D保持0.0。预期输出上升速率将大幅提高，继续观察是否出现超调或振荡。",
+  "p": 2.5,
+  "i": 0.05,
+  "d": 0.0,
+  "status": "TUNING"
+}
+
+========================================================================
+--- parse_probe (for later routing; not authoritative) ---
+
+--- strict ---
+{
+  "thought_process": "This is the first tuning round. Current parameters: P=1.0, I=0.05, D=0.0. System starts at 22.0, setpoint is 100.0. After 4350ms the output has only reached ~54.26, still 45.74 away from setpoint. The response is extremely slow - SLOW_RESPONSE state confirmed with 0 zero-crossings and 0% overshoot. The system is clearly under-driven. PWM has climbed from 120 to 276 but the output is rising very slowly (~1.1 units per 150ms step). This suggests the plant has significant thermal inertia or the gain is very low. Steady-state error estimate is 48.15, which is very large. Since this is Phase 1 (P tuning), I need to increase P significantly. The guardrail allows up to 3x current P, so max P = 3.0. Current P=1.0 is clearly insufficient. The response rate is approximately 1.1 units per 150ms = ~7.3 units/sec. To reach setpoint of 100 from 22 (delta=78) in a reasonable time, we need much faster response. With P=1.0 and error=78, the P-contribution is 78. With P=3.0 and error=78, P-contribution would be 234. The PWM is already at 276 in the latest sample which seems to be within range. However, I need to be conservative per the hardware-safe tuning style. I'll go with P=2.5 (within the 3x guardrail) to substantially improve response speed while staying conservative. I'll keep I very low (reduce slightly or keep same) since we're still in Phase 1. D stays at 0. Actually, I should also consider slightly reducing I to near-zero to properly execute Phase 1 protocol - I=0.05 is already very small so it can stay. Let me set P=2.5, I=0.05, D=0.0. This is a meaningful increase (2.5x) that should significantly improve the rise rate without risking oscillation given the slow thermal-like system behavior.",
+  "analysis_summary": "第一轮调参。系统从初始值22.0出发，4350ms后仅上升至54.26，响应极其缓慢（SLOW_RESPONSE），稳态误差估算48.15，超调量0%。PWM已从120爬升至276，但输出增速仅约1.1单位/150ms。当前P=1.0驱动力严重不足，处于第一阶段（P整定）。无振荡风险，首要问题是响应速度过慢。",
+  "tuning_action": "大幅提升P至2.5（在3x护栏内），以显著加快响应速度。I保持0.05不变（极小值，符合P整定阶段要求）。D保持0.0。预期输出上升速率将大幅提高，继续观察是否出现超调或振荡。",
+  "p": 2.5,
+  "i": 0.05,
+  "d": 0.0,
+  "status": "TUNING"
+}
