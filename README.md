@@ -18,6 +18,10 @@ source ~/.bashrc
 conda env create -f environment.yml
 ```
 3. config
+在同级目录中复制粘贴一个config_example.json并改名为config.json
+把自己的claude-api-key复制粘贴到对应位置即可
+可以运行chat.py检验key和python环境是否配置完成
+
 ## 启动！
 ```
 conda activate ai_env
