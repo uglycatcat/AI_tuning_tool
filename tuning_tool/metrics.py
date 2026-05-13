@@ -117,7 +117,6 @@ def _current_pid_from_samples(samples: List[Mapping[str, Any]]) -> Dict[str, flo
 
 def build_prompt_data(
     samples: List[Mapping[str, Any]],
-    config: Mapping[str, Any],
     *,
     plant_profile: str | None = None,
 ) -> str:
@@ -125,8 +124,6 @@ def build_prompt_data(
     生成本轮「Current Status + 时间序列摘要」正文。
     plant_profile 若为 virtual_tracking，会附加一段「时变给定」释意（与 metrics 一并呈现）。
     """
-    del config
-
     if not samples:
         return ""
 

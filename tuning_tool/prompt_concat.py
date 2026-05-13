@@ -240,7 +240,7 @@ def build_full_prompt(
     plant_profile = resolve_plant_profile(prompt_context)
     merged_ctx = merge_prompt_context(config, prompt_context, plant_profile=plant_profile)
     system = build_system(config, plant_profile=plant_profile)
-    prompt_data = build_prompt_data(samples, config, plant_profile=plant_profile)
+    prompt_data = build_prompt_data(samples, plant_profile=plant_profile)
     user = build_user(
         history_text,
         prompt_data,

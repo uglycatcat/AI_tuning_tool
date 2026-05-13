@@ -1,19 +1,12 @@
-**此项目用于测试 Claude API key 的可用性和使用方法。**
+# API_socket
+**此项目实现了基于AI的PID调参并提供了前端交互和串口调参接口**
+*（当前只实现前端虚拟PID借助AI调参）*
+# 1. 项目框架
+在前端搭建了可交互页面，产生了虚拟的PID（仿照物理世界的根据位置差距PID速度），然后提供了多种参数，之后通过采样和组装prompt传递给ai，得到结果解析出新版的PID参数然后同步给虚拟的PID，重复这个过程
 
-Python 终端对话：安装依赖后运行 `python3 chat.py`；模型列表：`python3 chat.py --list-models`。将 `config.example.json` 复制为 `config.json` 并填写密钥（`config.json` 已加入 `.gitignore`，请勿提交密钥）。
+# 2. tuning_tool
+项目的核心部分，负责解析来自PID端的参考数据并组装prompt发起request和解析response
 
-以下为官方/渠道给出的 Claude Code 配置方式（请将密钥替换为你自己的）：
-```
-使用方法：
-使用官方安装方式安装原版Claude code；
-修改Claude code配置文件:
- macOS/Linux系统下的配置文件路径是：~/.claude/settings.json
- Windows系统下配置文件路径是：C:\Users\你的用户名.claude\settings.json
-填入或修改成以下内容：
-{
-  "env": {
- "ANTHROPIC_BASE_URL": "https://c.loonaai.cn",
- "ANTHROPIC_AUTH_TOKEN": "你的key"
-  }
-}
-```
+# 3. web_tool
+项目的交互核心，负责展现PID当前的效果，配置参数，帮助开发者了解当前进度和情况
+

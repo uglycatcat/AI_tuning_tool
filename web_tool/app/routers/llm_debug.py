@@ -19,17 +19,10 @@ class LlmDebugBody(BaseModel):
     response: str | None = None
 
 
-class PidBody(BaseModel):
-    p: float | None = None
-    i: float | None = None
-    d: float | None = None
-
-
 class VirtualRoundBody(BaseModel):
     round_index: int = 1
     samples: list[dict] = Field(default_factory=list)
     history_text: str | None = None
-    current_pid: PidBody | None = None
     plant_profile: str = "hardware_step"
     prompt_context: dict | None = None
 
@@ -54,7 +47,6 @@ async def llm_debug_virtual_round(body: VirtualRoundBody) -> dict:
         "round_index": body.round_index,
         "samples": body.samples,
         "history_text": body.history_text,
-        "current_pid": body.current_pid.model_dump() if body.current_pid else None,
         "plant_profile": body.plant_profile,
         "prompt_context": body.prompt_context,
     }

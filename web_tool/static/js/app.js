@@ -410,11 +410,6 @@
       round_index: roundIndex,
       samples,
       history_text: buildHistoryText(),
-      current_pid: {
-        p: readFloat("vp-p", 0.8),
-        i: readFloat("vp-i", 0),
-        d: readFloat("vp-d", 0),
-      },
       plant_profile: "virtual_tracking",
     };
     return api("/api/debug/virtual-round", {

@@ -1,0 +1,31 @@
+{
+  "_参数说明": {
+    "_环境变量覆盖": "若设置了下列环境变量，则优先于同名字段：ANTHROPIC_AUTH_TOKEN→LLM_API_KEY；ANTHROPIC_BASE_URL→BASE_URL；ANTHROPIC_MODEL→MODEL；ANTHROPIC_MAX_TOKENS→MAX_TOKENS；ANTHROPIC_TIMEOUT→REQUEST_TIMEOUT_SECONDS；ANTHROPIC_SYSTEM→SYSTEM；ANTHROPIC_MAX_RETRIES→REQUEST_MAX_RETRIES；ANTHROPIC_RETRY_BASE_DELAY_SECONDS→REQUEST_RETRY_BASE_DELAY_SECONDS；USAGE_LOG_FILE；MODEL_INPUT_PRICE_PER_MTOK；MODEL_OUTPUT_PRICE_PER_MTOK。WEB_TOOL_HOST/WEB_TOOL_PORT 仅可由环境变量或本文件设置（无 ANTHROPIC 前缀）。",
+    "LLM_API_KEY": "兼容 Anthropic Messages 的网关 API 密钥（Bearer）。",
+    "BASE_URL": "网关根地址，不含尾部路径；与 Anthropic SDK base_url 一致。",
+    "MODEL": "模型 id，须与网关在 /v1/models 中提供的名称一致。",
+    "MAX_TOKENS": "单次回复 max_tokens 上限。",
+    "SYSTEM": "终端对话 chat.py 使用的 system 提示；null 表示不设。调参流水线使用 prompt 模板，不读此项。",
+    "REQUEST_TIMEOUT_SECONDS": "单次 HTTP 请求超时（秒）。",
+    "REQUEST_MAX_RETRIES": "tuning_tool 等对网关请求失败时的最大重试次数（不含首次）。chat.py 终端对话不使用此项。",
+    "REQUEST_RETRY_BASE_DELAY_SECONDS": "重试退避基数（秒），实际为指数退避。",
+    "USAGE_LOG_FILE": "token 用量 JSONL 日志相对项目根的路径或绝对路径。",
+    "MODEL_INPUT_PRICE_PER_MTOK": "可选，每百万 input token 美元单价，用于日志估算；null 表示不写费用估算。",
+    "MODEL_OUTPUT_PRICE_PER_MTOK": "可选，每百万 output token 美元单价。",
+    "WEB_TOOL_HOST": "可选，python -m web_tool 监听地址；不设则 127.0.0.1。",
+    "WEB_TOOL_PORT": "可选，web 服务端口；不设则 8765。"
+  },
+  "LLM_API_KEY": "在此填写密钥",
+  "BASE_URL": "https://c.loonaai.cn",
+  "MODEL": "claude-sonnet-4-6",
+  "MAX_TOKENS": 4096,
+  "SYSTEM": null,
+  "REQUEST_TIMEOUT_SECONDS": 120,
+  "REQUEST_MAX_RETRIES": 3,
+  "REQUEST_RETRY_BASE_DELAY_SECONDS": 0.75,
+  "USAGE_LOG_FILE": "token_usage_sessions.jsonl",
+  "MODEL_INPUT_PRICE_PER_MTOK": null,
+  "MODEL_OUTPUT_PRICE_PER_MTOK": null,
+  "WEB_TOOL_HOST": "127.0.0.1",
+  "WEB_TOOL_PORT": 8765
+}
