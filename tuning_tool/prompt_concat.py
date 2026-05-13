@@ -33,15 +33,66 @@ def clear_prompt_config_cache() -> None:
     _CONFIG_PATH = None
 
 
-def build_system(config: Mapping[str, Any]) -> str:
+def build_system(config: Mapping[str, Any], *, plant_profile: str = "hardware_step") -> str:
     sys_cfg = config.get("system") or {}
-    base = str(sys_cfg.get("base", "")).strip()
     suffix = str(sys_cfg.get("serial_mode_suffix", "")).strip()
+
+    hw = str(sys_cfg.get("hardware_step_base") or "").strip()
+    legacy = str(sys_cfg.get("base") or "").strip()
+    vt = str(sys_cfg.get("virtual_tracking_base") or "").strip()
+
+    if plant_profile == "virtual_tracking":
+        core = vt or legacy or hw
+        return core
+
+    core_hw = hw or legacy or vt
     if not suffix:
-        return base
-    if not base:
+        return core_hw
+    if not core_hw:
         return suffix
-    return f"{base}\n\n{suffix}"
+    return f"{core_hw}\n\n{suffix}"
+
+
+def resolve_plant_profile(prompt_context: Optional[Mapping[str, Any]]) -> str:
+    pv = ""
+    if prompt_context:
+        pv = str(prompt_context.get("plant_profile") or "").strip().lower().replace("-", "_")
+    if pv == "virtual_tracking":
+        return "virtual_tracking"
+    return "hardware_step"
+
+
+def merge_prompt_context(
+    config: Mapping[str, Any],
+    prompt_context: Optional[Mapping[str, Any]],
+    *,
+    plant_profile: str,
+) -> Dict[str, Any]:
+    """合并默认 context、工况专属护栏与各轮显式上下文。"""
+    ctx_cfg = config.get("context") or {}
+    merged: Dict[str, Any] = dict(ctx_cfg.get("default_keys") or {})
+
+    hints = ctx_cfg.get("guardrail_hints")
+    gh: str | None = None
+    if isinstance(hints, Mapping):
+        raw = hints.get(plant_profile)
+        if isinstance(raw, str):
+            gh = raw.strip()
+
+    if gh:
+        merged["per_round_guardrail_hint"] = gh
+
+    if plant_profile == "virtual_tracking":
+        merged.setdefault("source", "virtual_pid_simulation")
+        merged.setdefault("tuning_style", "sim_tracking_exploratory")
+    else:
+        merged.setdefault("source", "serial_hardware")
+        merged.setdefault("tuning_style", "conservative_hardware_safe")
+
+    if prompt_context:
+        merged.update(dict(prompt_context))
+    merged["plant_profile"] = plant_profile
+    return merged
 
 
 def _stringify_context_value(value: Any) -> str:
@@ -108,9 +159,14 @@ def _single_controller_block(config: Mapping[str, Any]) -> str:
     return "\n".join(parts)
 
 
-def _round_task_block(config: Mapping[str, Any]) -> str:
+def _round_task_block(config: Mapping[str, Any], *, plant_profile: str) -> str:
     u = config.get("user") or {}
-    rt = u.get("round_task") or {}
+    rt_block = (
+        u.get("round_task_virtual_tracking")
+        if plant_profile == "virtual_tracking"
+        else None
+    )
+    rt = rt_block or u.get("round_task") or {}
     section = str(u.get("section_title_round_task") or "## 本轮任务")
     mode_label = str(rt.get("mode_label", "hardware"))
     task_line = str(rt.get("task_line", ""))
@@ -139,6 +195,7 @@ def build_user(
     user_preference_summary: Optional[str],
     config: Mapping[str, Any],
     *,
+    plant_profile: str,
     serial_port: Optional[str] = None,
     include_context: bool = True,
 ) -> str:
@@ -163,7 +220,7 @@ def build_user(
     if pref:
         sections.append(pref)
 
-    sections.append(_round_task_block(config))
+    sections.append(_round_task_block(config, plant_profile=plant_profile))
     sections.append(_single_controller_block(config))
 
     return "\n\n".join(s for s in sections if s)
@@ -180,14 +237,17 @@ def build_full_prompt(
     include_context: bool = True,
 ) -> Dict[str, str]:
     config = load_prompt_config(config_path)
-    system = build_system(config)
-    prompt_data = build_prompt_data(samples, config)
+    plant_profile = resolve_plant_profile(prompt_context)
+    merged_ctx = merge_prompt_context(config, prompt_context, plant_profile=plant_profile)
+    system = build_system(config, plant_profile=plant_profile)
+    prompt_data = build_prompt_data(samples, config, plant_profile=plant_profile)
     user = build_user(
         history_text,
         prompt_data,
-        prompt_context,
+        merged_ctx,
         user_preference_summary,
         config,
+        plant_profile=plant_profile,
         serial_port=serial_port,
         include_context=include_context,
     )
@@ -321,6 +381,8 @@ __all__ = [
     "load_prompt_config",
     "clear_prompt_config_cache",
     "build_system",
+    "resolve_plant_profile",
+    "merge_prompt_context",
     "format_model_context",
     "build_user",
     "build_full_prompt",

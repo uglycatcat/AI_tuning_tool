@@ -55,7 +55,21 @@
       data = text;
     }
     if (!res.ok) {
-      const err = new Error(typeof data === "object" && data && data.detail ? data.detail : res.statusText);
+      let msg = res.statusText;
+      if (typeof data === "object" && data) {
+        if (typeof data.detail === "string") {
+          msg = data.detail;
+        } else if (Array.isArray(data.detail)) {
+          msg = data.detail
+            .map((x) => (typeof x === "object" && x.msg ? `${x.loc?.join?.(".") || ""}: ${x.msg}` : JSON.stringify(x)))
+            .join("; ");
+        } else if (typeof data.message === "string") {
+          msg = data.message;
+        }
+      } else if (typeof data === "string" && data.trim()) {
+        msg = data.trim();
+      }
+      const err = new Error(msg || res.statusText);
       err.status = res.status;
       err.body = data;
       throw err;
@@ -376,6 +390,7 @@
         i: readFloat("vp-i", 0),
         d: readFloat("vp-d", 0),
       },
+      plant_profile: "virtual_tracking",
     };
     return api("/api/debug/virtual-round", {
       method: "POST",

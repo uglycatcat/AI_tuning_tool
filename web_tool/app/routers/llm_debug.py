@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
@@ -30,6 +30,8 @@ class VirtualRoundBody(BaseModel):
     samples: list[dict] = Field(default_factory=list)
     history_text: str | None = None
     current_pid: PidBody | None = None
+    plant_profile: str = "hardware_step"
+    prompt_context: dict | None = None
 
 
 @router.get("/debug/llm")
@@ -53,8 +55,15 @@ async def llm_debug_virtual_round(body: VirtualRoundBody) -> dict:
         "samples": body.samples,
         "history_text": body.history_text,
         "current_pid": body.current_pid.model_dump() if body.current_pid else None,
+        "plant_profile": body.plant_profile,
+        "prompt_context": body.prompt_context,
     }
-    result = await run_in_threadpool(run_virtual_round, payload)
+    try:
+        result = await run_in_threadpool(run_virtual_round, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
     if result.get("prompt_text"):
         _store["last_prompt"] = str(result["prompt_text"])
     if result.get("response_text"):

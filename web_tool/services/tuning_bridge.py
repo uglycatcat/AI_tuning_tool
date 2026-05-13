@@ -11,6 +11,11 @@ from tuning_tool.response_parser import append_capture_to_output2_log, parse_jso
 _CSV_FIELDS = ("timestamp", "setpoint", "input", "pwm", "error", "p", "i", "d")
 
 
+def _normalize_plant_profile(raw: Any) -> str:
+    pv = str(raw or "").strip().lower().replace("-", "_")
+    return "virtual_tracking" if pv == "virtual_tracking" else "hardware_step"
+
+
 def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -80,7 +85,17 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
         raise ValueError("samples 为空，无法执行本轮调参。")
 
     csv_path = _write_round_csv(round_index, samples)
-    prompt = build_full_prompt(samples=samples, history_text=history_text)
+
+    plant_profile = _normalize_plant_profile(raw_payload.get("plant_profile"))
+    extra_ctx = raw_payload.get("prompt_context")
+    prompt_context: dict[str, Any] = {}
+    if isinstance(extra_ctx, Mapping):
+        prompt_context.update(dict(extra_ctx))
+    prompt_context["plant_profile"] = plant_profile
+
+    prompt = build_full_prompt(
+        samples=samples, history_text=history_text, prompt_context=prompt_context
+    )
     prompt_text = _format_prompt_text(prompt["system"], prompt["user"], round_index)
 
     llm_resp = request_once(system=prompt["system"], user=prompt["user"])

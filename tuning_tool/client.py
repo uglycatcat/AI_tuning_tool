@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,6 +18,8 @@ DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 4096
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_USAGE_LOG = "token_usage_sessions.jsonl"
+DEFAULT_MAX_RETRIES = 3
+DEFAULT_RETRY_BASE_DELAY_SECONDS = 0.75
 
 USAGE_COUNT_KEYS: tuple[str, ...] = (
     "input_tokens",
@@ -36,6 +39,8 @@ class Settings:
     usage_log_path: Path
     input_price_per_mtok: float | None
     output_price_per_mtok: float | None
+    max_retries: int
+    retry_base_delay_seconds: float
 
 
 def _project_root() -> Path:
@@ -131,6 +136,19 @@ def load_settings() -> Settings:
         max_v=600.0,
     )
     usage_log_path = _resolve_usage_log_path(data)
+    max_retries = _coerce_int(
+        os.environ.get("ANTHROPIC_MAX_RETRIES", "") or data.get("REQUEST_MAX_RETRIES"),
+        DEFAULT_MAX_RETRIES,
+        min_v=0,
+        max_v=15,
+    )
+    retry_base_delay_seconds = _coerce_float(
+        os.environ.get("ANTHROPIC_RETRY_BASE_DELAY_SECONDS", "")
+        or data.get("REQUEST_RETRY_BASE_DELAY_SECONDS"),
+        DEFAULT_RETRY_BASE_DELAY_SECONDS,
+        min_v=0.05,
+        max_v=60.0,
+    )
     in_price = _optional_price(
         os.environ.get("MODEL_INPUT_PRICE_PER_MTOK", "")
         or data.get("MODEL_INPUT_PRICE_PER_MTOK")
@@ -154,6 +172,8 @@ def load_settings() -> Settings:
         usage_log_path=usage_log_path,
         input_price_per_mtok=in_price,
         output_price_per_mtok=out_price,
+        max_retries=max_retries,
+        retry_base_delay_seconds=retry_base_delay_seconds,
     )
 
 
@@ -225,6 +245,11 @@ def append_session_usage_log(
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
+def _http_status_retryable(status_code: int) -> bool:
+    """网关多后端时 502（含无效 model slug 透传）、限流等与短暂不可用可短暂重试。"""
+    return status_code in (408, 409, 429, 502, 503, 504)
+
+
 def extract_text_blocks(message: Any) -> str:
     parts: list[str] = []
     for block in message.content:
@@ -260,14 +285,26 @@ def request_once(*, system: str, user: str) -> Dict[str, Any]:
         if system_text:
             kwargs["system"] = system_text
 
-        try:
-            resp = client.messages.create(**kwargs)
-        except APIStatusError as e:
-            raise RuntimeError(f"API 错误 ({e.status_code}): {e.message}") from e
-        except APIConnectionError as e:
-            raise RuntimeError(f"连接失败: {e}") from e
-        except Exception as e:  # noqa: BLE001
-            raise RuntimeError(f"请求异常: {e}") from e
+        resp = None
+        for attempt in range(s.max_retries + 1):
+            try:
+                resp = client.messages.create(**kwargs)
+                break
+            except APIStatusError as e:
+                code = int(getattr(e, "status_code", 0) or 0)
+                if attempt < s.max_retries and _http_status_retryable(code):
+                    time.sleep(s.retry_base_delay_seconds * (2**attempt))
+                    continue
+                raise RuntimeError(f"API 错误 ({e.status_code}): {e.message}") from e
+            except APIConnectionError as e:
+                if attempt < s.max_retries:
+                    time.sleep(s.retry_base_delay_seconds * (2**attempt))
+                    continue
+                raise RuntimeError(f"连接失败: {e}") from e
+            except Exception as e:  # noqa: BLE001
+                raise RuntimeError(f"请求异常: {e}") from e
+        if resp is None:
+            raise RuntimeError("未收到模型响应。")
 
         usage = _usage_counts(getattr(resp, "usage", None))
         for k in counts:
