@@ -306,6 +306,17 @@ textarea {
   color: var(--hover);
 }
 
+.btn-primary:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  color: var(--muted);
+}
+
+.btn-primary:disabled:hover {
+  border-color: var(--border);
+  color: var(--muted);
+}
+
 .btn-ghost {
   font-size: 0.72rem;
   padding: 0.25rem 0.45rem;

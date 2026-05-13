@@ -496,6 +496,8 @@
   const stopVirtualLoop = () => {
     if (simTimerId) clearInterval(simTimerId);
     simTimerId = 0;
+    const startBtn = $("btn-vp-start");
+    if (startBtn) startBtn.disabled = false;
   };
 
   const appendSerialLog = (line) => {
@@ -618,11 +620,10 @@
     $("btn-vp-start").addEventListener("click", () => {
       if (mode !== "virtual") return;
       if (simTimerId) return;
-      if (tuningState.effectiveEnabled) {
-        resetTuningRuntime();
-      }
       $("vp-status").textContent = "运行中";
       simTimerId = setInterval(tickVirtual, Math.round(1000 * SIM_DT));
+      const startBtn = $("btn-vp-start");
+      if (startBtn) startBtn.disabled = true;
     });
 
     $("btn-vp-pause").addEventListener("click", () => {
