@@ -16,7 +16,15 @@
     "WEB_TOOL_PORT": "可选，web 服务端口；不设则 8765。",
     "AI_TUNING_REFERENCE_DURATION_SECONDS": "Web 虚拟 AI 调参：每轮送给模型的参考轨迹采样总时长（秒）。",
     "AI_TUNING_REFERENCE_SAMPLE_RATE_HZ": "参考数据采样频率（Hz），前端按 1/频率 作为采样间隔；过高会夹到约 100Hz。",
-    "AI_TUNING_ROUNDS": "AI 调参向模型询问的总轮次（每轮采集一段数据后请求一次建议）。"
+    "AI_TUNING_ROUNDS": "AI 调参向模型询问的总轮次（每轮采集一段数据后请求一次建议）。",
+    "SERIAL_BYTESIZE": "web_tool 串口模式：数据位，默认 8。",
+    "SERIAL_STOPBITS": "停止位，1 或 2，默认 1。",
+    "SERIAL_PARITY": "校验：N/E/O/M/S 或 null 表示无校验（N）。",
+    "SERIAL_XONXOFF": "软件流控 XON/XOFF，默认 false。",
+    "SERIAL_RTSCTS": "RTS/CTS 硬件流控，默认 false。",
+    "SERIAL_DSRDTR": "DSR/DTR 硬件流控，默认 false。",
+    "SERIAL_SET_DTR_LOW": "打开串口后将 DTR 置低，默认 true。",
+    "SERIAL_SET_RTS_LOW": "打开串口后将 RTS 置低，默认 true。"
   },
   "LLM_API_KEY": "在此填写密钥",
   "BASE_URL": "https://c.loonaai.cn",
@@ -33,5 +41,13 @@
   "WEB_TOOL_PORT": 8765,
   "AI_TUNING_REFERENCE_DURATION_SECONDS": 4.0,
   "AI_TUNING_REFERENCE_SAMPLE_RATE_HZ": 10.0,
-  "AI_TUNING_ROUNDS": 10
+  "AI_TUNING_ROUNDS": 10,
+  "SERIAL_BYTESIZE": 8,
+  "SERIAL_STOPBITS": 1,
+  "SERIAL_PARITY": "N",
+  "SERIAL_XONXOFF": false,
+  "SERIAL_RTSCTS": false,
+  "SERIAL_DSRDTR": false,
+  "SERIAL_SET_DTR_LOW": true,
+  "SERIAL_SET_RTS_LOW": true
 }

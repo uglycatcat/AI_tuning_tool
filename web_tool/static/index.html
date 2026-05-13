@@ -94,11 +94,14 @@
         </div>
 
         <div id="panel-serial" class="panel hidden">
-          <p class="hint">串口助手（占位，无真实读写）</p>
+          <p class="hint">串口 PID（手动调参；原始收发不展示）</p>
           <div class="field-row">
-            <label>端口</label>
-            <select id="serial-ports" aria-label="串口列表"></select>
-            <button type="button" class="btn-primary" id="btn-serial-refresh">刷新</button>
+            <label class="grow"
+              >端口
+              <input type="text" id="serial-port-input" list="serial-port-list" value="/dev/ttyUSB0" autocomplete="off" />
+            </label>
+            <datalist id="serial-port-list"></datalist>
+            <button type="button" class="btn-primary" id="btn-serial-refresh">刷新列表</button>
           </div>
           <div class="field-row">
             <label>波特率</label>
@@ -107,22 +110,36 @@
               <option value="19200">19200</option>
               <option value="38400">38400</option>
               <option value="57600">57600</option>
-              <option value="115200" selected>115200</option>
+              <option value="115200">115200</option>
               <option value="230400">230400</option>
               <option value="460800">460800</option>
               <option value="921600">921600</option>
-              <option value="1000000">1000000</option>
+              <option value="1000000" selected>1000000</option>
             </select>
+          </div>
+          <div class="field-row">
+            <label class="check-label">
+              <input type="checkbox" id="sp-enable-tuning" disabled />
+              接入 tuning_tool（串口模式暂未实现）
+            </label>
+            <span class="mode-meta" id="sp-tuning-placeholder">仅 UI 占位</span>
+          </div>
+          <div class="field-grid">
+            <label>周期 (s)<input type="number" id="sp-period" step="0.1" value="4" /></label>
+            <label>振幅<input type="number" id="sp-amp" step="0.1" value="10" /></label>
+            <label>偏移<input type="number" id="sp-offset" step="0.1" value="50" /></label>
+            <label>P<input type="number" id="sp-p" step="0.01" value="0.8" /></label>
+            <label>I<input type="number" id="sp-i" step="0.001" value="0" /></label>
+            <label>D<input type="number" id="sp-d" step="0.001" value="0" /></label>
           </div>
           <div class="btn-row">
             <button type="button" class="btn-primary" id="btn-serial-connect">连接</button>
             <button type="button" class="btn-primary" id="btn-serial-disconnect">断开</button>
+            <button type="button" class="btn-primary" id="btn-serial-start">启动</button>
+            <button type="button" class="btn-primary" id="btn-serial-pause">暂停</button>
+            <button type="button" class="btn-primary" id="btn-serial-close">关闭</button>
           </div>
-          <div class="field-row">
-            <input type="text" id="serial-send-line" class="grow" placeholder="发送行（仍为 501 占位）" />
-            <button type="button" class="btn-primary" id="btn-serial-send">发送</button>
-          </div>
-          <pre class="log" id="serial-log"></pre>
+          <p class="status" id="serial-status">未连接</p>
         </div>
       </section>
 

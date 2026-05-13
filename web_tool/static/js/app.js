@@ -12,6 +12,12 @@
   let tuningRoundDurationS = 4.0;
 
   let mode = "virtual"; // "virtual" | "serial"
+  /** @type {WebSocket | null} */
+  let serialWs = null;
+  let serialConnected = false;
+  let serialIngestPaused = false;
+  let serialAwaitingSample = false;
+  let spPidTimer = 0;
   let chart;
   /** @type {number} */
   let simTimerId = 0;
@@ -500,39 +506,118 @@
     if (startBtn) startBtn.disabled = false;
   };
 
-  const appendSerialLog = (line) => {
-    const el = $("serial-log");
-    if (!el) return;
-    el.textContent += `${line}\n`;
-    el.scrollTop = el.scrollHeight;
+  const setSerialStatus = (text) => {
+    const el = $("serial-status");
+    if (el) el.textContent = text;
+  };
+
+  const closeSerialWebSocket = () => {
+    if (serialWs) {
+      try {
+        serialWs.close();
+      } catch {
+        /* noop */
+      }
+      serialWs = null;
+    }
+  };
+
+  const stopSerialSession = async () => {
+    closeSerialWebSocket();
+    serialConnected = false;
+    serialIngestPaused = false;
+    serialAwaitingSample = false;
+    const pBtn = $("btn-serial-pause");
+    if (pBtn) pBtn.textContent = "暂停";
+    try {
+      await api("/api/serial/disconnect", { method: "POST" });
+    } catch {
+      /* noop */
+    }
+  };
+
+  const openSerialWebSocket = () => {
+    closeSerialWebSocket();
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const url = `${proto}//${window.location.host}/api/serial/stream`;
+    const ws = new WebSocket(url);
+    serialWs = ws;
+    ws.onmessage = (ev) => {
+      handleSerialWsMessage(ev);
+    };
+    ws.onerror = () => {
+      if (mode === "serial") setSerialStatus("WebSocket 错误（曲线可能无法更新）");
+    };
+  };
+
+  const handleSerialWsMessage = (ev) => {
+    if (mode !== "serial") return;
+    let data;
+    try {
+      data = JSON.parse(ev.data);
+    } catch {
+      return;
+    }
+    if (data.type === "sample") {
+      if (serialIngestPaused) return;
+      const t = Number(data.t);
+      const setpoint = Number(data.setpoint);
+      const input = Number(data.input);
+      const err = Number(data.error);
+      if (![t, setpoint, input, err].every((x) => Number.isFinite(x))) return;
+      bufTarget.push({ x: t, y: setpoint });
+      bufActual.push({ x: t, y: input });
+      bufError.push({ x: t, y: err });
+      trimBuffers(t);
+      ensureChart();
+      syncChartBuffers();
+      setChartWindow(t);
+      chart.update();
+      updateChartStats();
+      if (serialAwaitingSample) {
+        serialAwaitingSample = false;
+      }
+      $("chart-hint").textContent = `串口 · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
+      setSerialStatus(
+        `运行中 · t=${t.toFixed(3)}s · setpoint=${setpoint.toFixed(3)} · input=${input.toFixed(3)} · error=${err.toFixed(3)}`
+      );
+    } else if (data.type === "parse_error") {
+      setSerialStatus("数据解析失败");
+    } else if (data.type === "io_error") {
+      setSerialStatus(String(data.message || "串口读取异常"));
+    }
+  };
+
+  const scheduleSerialPidSend = () => {
+    if (!serialConnected || mode !== "serial") return;
+    if (spPidTimer) window.clearTimeout(spPidTimer);
+    spPidTimer = window.setTimeout(async () => {
+      spPidTimer = 0;
+      const p = readFloat("sp-p", 0);
+      const i = readFloat("sp-i", 0);
+      const d = readFloat("sp-d", 0);
+      const line = `set_pid[${p},${i},${d}]`;
+      try {
+        await api("/api/serial/send", {
+          method: "POST",
+          body: JSON.stringify({ line }),
+        });
+      } catch {
+        /* 静默失败，避免打断调参 */
+      }
+    }, 280);
   };
 
   const loadPorts = async () => {
     const data = await api("/api/serial/ports");
-    const sel = $("serial-ports");
-    sel.innerHTML = "";
+    const dl = $("serial-port-list");
+    if (!dl) return;
+    dl.innerHTML = "";
     const ports = (data && data.ports) || [];
-    if (!ports.length) {
-      const opt = document.createElement("option");
-      opt.value = "";
-      opt.textContent = "（无端口 · 占位）";
-      sel.appendChild(opt);
-      return;
-    }
     for (const p of ports) {
       const opt = document.createElement("option");
       opt.value = p;
-      opt.textContent = p;
-      sel.appendChild(opt);
-    }
-  };
-
-  const refreshSerialStatus = async () => {
-    try {
-      const s = await api("/api/serial/status");
-      appendSerialLog(`[status] ${s.status}: ${s.message}`);
-    } catch (e) {
-      appendSerialLog(`[status] ${e.message}`);
+      dl.appendChild(opt);
     }
   };
 
@@ -553,19 +638,23 @@
       $("chart-hint").textContent = `虚拟 PID · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
       updateTuningEffectiveLabel();
     } else {
-      $("chart-hint").textContent = "串口模式：暂无曲线数据（占位）";
+      $("chart-hint").textContent = `串口模式 · 曲线窗 ${WINDOW_S}s（连接并启动后显示）`;
     }
   };
 
   const fullResetForModeSwitch = () => {
+    if (mode === "virtual") {
+      void stopSerialSession();
+      setSerialStatus("未连接");
+    }
     stopVirtualLoop();
     simReset();
     resetTuningRuntime();
     $("vp-status").textContent = "已停止";
-    $("serial-log").textContent = "";
     clearPagedLogs();
     if (mode === "serial") {
       updateChartSerialEmpty();
+      setSerialStatus(serialConnected ? "已连接，点击「启动」下发指令" : "未连接");
     } else {
       ensureChart();
       syncChartBuffers();
@@ -650,46 +739,109 @@
     $("btn-serial-refresh").addEventListener("click", async () => {
       try {
         await loadPorts();
-        appendSerialLog("[refresh] 已刷新端口列表");
+        if (mode === "serial") setSerialStatus("端口列表已刷新");
       } catch (e) {
-        appendSerialLog(`[refresh] ${e.message}`);
+        if (mode === "serial") setSerialStatus(`刷新失败：${e.message}`);
       }
     });
 
     $("btn-serial-connect").addEventListener("click", async () => {
-      const port = $("serial-ports").value || "";
-      const baudrate = parseInt(String($("serial-baud").value || "115200"), 10) || 115200;
+      const port = ($("serial-port-input") && $("serial-port-input").value) || "";
+      const baudrate = parseInt(String($("serial-baud").value || "1000000"), 10) || 1000000;
       try {
         const r = await api("/api/serial/connect", {
           method: "POST",
           body: JSON.stringify({ port, baudrate }),
         });
-        appendSerialLog(`[connect] ${JSON.stringify(r)}`);
+        if (r && r.status === "ok") {
+          serialConnected = true;
+          serialIngestPaused = false;
+          serialAwaitingSample = false;
+          openSerialWebSocket();
+          setSerialStatus("已连接，点击「启动」下发调试指令");
+        } else {
+          serialConnected = false;
+          setSerialStatus(String((r && r.message) || "连接失败"));
+        }
       } catch (e) {
-        appendSerialLog(`[connect] ${e.message}`);
+        serialConnected = false;
+        setSerialStatus(`连接失败：${e.message}`);
       }
     });
 
     $("btn-serial-disconnect").addEventListener("click", async () => {
-      try {
-        const r = await api("/api/serial/disconnect", { method: "POST" });
-        appendSerialLog(`[disconnect] ${JSON.stringify(r)}`);
-      } catch (e) {
-        appendSerialLog(`[disconnect] ${e.message}`);
-      }
+      await stopSerialSession();
+      setSerialStatus("未连接");
     });
 
-    $("btn-serial-send").addEventListener("click", async () => {
-      const line = $("serial-send-line").value || "";
+    $("btn-serial-start").addEventListener("click", async () => {
+      if (mode !== "serial") return;
+      if (!serialConnected) {
+        setSerialStatus("请先连接串口");
+        return;
+      }
+      const period = readFloat("sp-period", 4);
+      const amp = readFloat("sp-amp", 10);
+      const off = readFloat("sp-offset", 50);
+      const line = `debug_pid_ai_tuning start ${period} ${amp} ${off}`;
       try {
         await api("/api/serial/send", {
           method: "POST",
           body: JSON.stringify({ line }),
         });
-        appendSerialLog("[send] 意外成功");
+        bufTarget.length = 0;
+        bufActual.length = 0;
+        bufError.length = 0;
+        serialAwaitingSample = true;
+        ensureChart();
+        syncChartBuffers();
+        chart.options.scales.x.min = undefined;
+        chart.options.scales.x.max = undefined;
+        chart.update();
+        updateChartStats();
+        setSerialStatus("没有收到数据");
       } catch (e) {
-        appendSerialLog(`[send] ${e.status || ""} ${e.message}`);
+        setSerialStatus(`启动失败：${e.message}`);
       }
+    });
+
+    $("btn-serial-pause").addEventListener("click", async () => {
+      if (mode !== "serial" || !serialConnected) return;
+      const next = !serialIngestPaused;
+      try {
+        await api("/api/serial/ingest-pause", {
+          method: "POST",
+          body: JSON.stringify({ paused: next }),
+        });
+        serialIngestPaused = next;
+        $("btn-serial-pause").textContent = serialIngestPaused ? "继续" : "暂停";
+        setSerialStatus(
+          serialIngestPaused ? "已暂停（本机不再解析与刷新曲线；下位机仍在运行）" : "已继续接收与绘图"
+        );
+      } catch (e) {
+        setSerialStatus(`暂停切换失败：${e.message}`);
+      }
+    });
+
+    $("btn-serial-close").addEventListener("click", async () => {
+      if (mode !== "serial" || !serialConnected) {
+        setSerialStatus("请先连接串口");
+        return;
+      }
+      try {
+        await api("/api/serial/send", {
+          method: "POST",
+          body: JSON.stringify({ line: "debug_pid_ai_tuning stop" }),
+        });
+        setSerialStatus("已下发关闭指令（下位机应停止上报）");
+      } catch (e) {
+        setSerialStatus(`关闭指令失败：${e.message}`);
+      }
+    });
+
+    ["sp-p", "sp-i", "sp-d"].forEach((id) => {
+      const el = $(id);
+      if (el) el.addEventListener("change", () => scheduleSerialPidSend());
     });
 
     $("btn-llm-pull").addEventListener("click", async () => {
