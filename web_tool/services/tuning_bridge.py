@@ -20,8 +20,9 @@ def _project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _ensure_round_dir() -> Path:
-    out_dir = _project_root() / "web_tool" / "runtime" / "virtual_rounds"
+def _ensure_round_dir(session: str = "virtual") -> Path:
+    sub = "serial_rounds" if str(session).strip().lower() == "serial" else "virtual_rounds"
+    out_dir = _project_root() / "web_tool" / "runtime" / sub
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -44,8 +45,8 @@ def _normalize_samples(raw_samples: Any) -> list[dict[str, float]]:
     return out
 
 
-def _write_round_csv(round_index: int, samples: list[dict[str, float]]) -> Path:
-    out_dir = _ensure_round_dir()
+def _write_round_csv(round_index: int, samples: list[dict[str, float]], session: str = "virtual") -> Path:
+    out_dir = _ensure_round_dir(session)
     csv_path = out_dir / f"round_{round_index}.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as fp:
         writer = csv.DictWriter(fp, fieldnames=list(_CSV_FIELDS))
@@ -84,7 +85,9 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
     if not samples:
         raise ValueError("samples 为空，无法执行本轮调参。")
 
-    csv_path = _write_round_csv(round_index, samples)
+    session_raw = str(raw_payload.get("session") or "virtual").strip().lower()
+    session = "serial" if session_raw == "serial" else "virtual"
+    csv_path = _write_round_csv(round_index, samples, session)
 
     plant_profile = _normalize_plant_profile(raw_payload.get("plant_profile"))
     extra_ctx = raw_payload.get("prompt_context")
@@ -103,7 +106,7 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
     if not raw_text:
         raise RuntimeError("模型返回为空。")
 
-    out_dir = _ensure_round_dir()
+    out_dir = _ensure_round_dir(session)
     output2_path = out_dir / f"round_{round_index}_output2.log"
     append_capture_to_output2_log(raw_text, log_path=output2_path)
     response_text = output2_path.read_text(encoding="utf-8")

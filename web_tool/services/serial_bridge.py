@@ -166,6 +166,10 @@ def _reader_loop() -> None:
                 "setpoint": float(parsed["setpoint"]),
                 "input": float(parsed["input"]),
                 "error": float(parsed["error"]),
+                "pwm": float(parsed["pwm"]),
+                "p": float(parsed["p"]),
+                "i": float(parsed["i"]),
+                "d": float(parsed["d"]),
             }
         )
 

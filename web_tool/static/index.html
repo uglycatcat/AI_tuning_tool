@@ -94,7 +94,7 @@
         </div>
 
         <div id="panel-serial" class="panel hidden">
-          <p class="hint">串口 PID（手动调参；原始收发不展示）</p>
+          <p class="hint">串口 PID（原始收发不展示；可选接入 tuning_tool）</p>
           <div class="field-row">
             <label class="grow"
               >端口
@@ -119,10 +119,10 @@
           </div>
           <div class="field-row">
             <label class="check-label">
-              <input type="checkbox" id="sp-enable-tuning" disabled />
-              接入 tuning_tool（串口模式暂未实现）
+              <input type="checkbox" id="sp-enable-tuning" />
+              接入 tuning_tool（下次「重启」生效）
             </label>
-            <span class="mode-meta" id="sp-tuning-placeholder">仅 UI 占位</span>
+            <span class="mode-meta" id="sp-tuning-effective-state">当前：未接入 · 待生效：未接入</span>
           </div>
           <div class="field-grid">
             <label>周期 (s)<input type="number" id="sp-period" step="0.1" value="4" /></label>
@@ -137,6 +137,7 @@
             <button type="button" class="btn-primary" id="btn-serial-disconnect">断开</button>
             <button type="button" class="btn-primary" id="btn-serial-start">启动</button>
             <button type="button" class="btn-primary" id="btn-serial-pause">暂停</button>
+            <button type="button" class="btn-primary" id="btn-serial-restart">重启</button>
             <button type="button" class="btn-primary" id="btn-serial-close">关闭</button>
           </div>
           <p class="status" id="serial-status">未连接</p>

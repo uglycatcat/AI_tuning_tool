@@ -25,6 +25,8 @@ class VirtualRoundBody(BaseModel):
     history_text: str | None = None
     plant_profile: str = "hardware_step"
     prompt_context: dict | None = None
+    """落盘子目录：virtual → runtime/virtual_rounds，serial → runtime/serial_rounds"""
+    session: str = "virtual"
 
 
 @router.get("/debug/llm")
@@ -49,6 +51,7 @@ async def llm_debug_virtual_round(body: VirtualRoundBody) -> dict:
         "history_text": body.history_text,
         "plant_profile": body.plant_profile,
         "prompt_context": body.prompt_context,
+        "session": body.session,
     }
     try:
         result = await run_in_threadpool(run_virtual_round, payload)

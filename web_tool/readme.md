@@ -21,7 +21,6 @@
 目前是测试阶段人为规定进行三轮循环
 
 ## 2. 简单的串口调试助手，用来实际接入串口进行调试
-（当前此功能不考虑接入tuning，目前还是手动调参模式）
 不需要完整的调试助手，只需包含以下功能
 无需显示实际接受的数据文本或者下发的数据文本，包装成简单的ui即可
 
@@ -50,7 +49,10 @@
 "debug_pid_ai_tuning stop"
 之后下位机不在发消息
 
-留出类似于虚拟pid的接入tuning的ui控件，但是不需要实现，只要能看到ui效果就行
+### 串口模式接入 tuning_tool（与虚拟 PID 对齐）
+- 勾选「接入 tuning_tool」后，仅在下次点击**重启**时生效（与 §1 虚拟 PID 规则一致）；**重启**会清空曲线与调参轮次状态，不会自动再次下发 `start`，需用户再点**启动**。
+- 生效后，在收到合法样本流时按根目录 config 中 `AI_TUNING_*`（经 `/api/tuning/ui-settings`）进行固定间隔采样、满一轮时长后调用与虚拟模式相同的 `/api/debug/virtual-round`；`plant_profile` 为 `hardware_step`，CSV 与 output2 日志落在 `web_tool/runtime/serial_rounds/`。
+- Prompt / Response 文本框与虚拟模式共用分页逻辑；解析出的 PID 写回 `sp-p/i/d` 并立即尝试下发 `set_pid[p,i,d]`。
 
 ## 3. 有PID图像，方便开发者可视化调参效果（虚拟的或者从串口读到的）
 - 横轴为时间，默认 **10s** 滚动窗口；按当前模式显示数据源（虚拟仿真 / 串口接入后的数据流）。
