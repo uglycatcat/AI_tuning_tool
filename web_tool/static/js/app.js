@@ -6,9 +6,10 @@
   const SIM_DT = 0.01;
   /** 速度环时间常数 (s)：实际速度一阶跟上 PID 给出的速度指令 */
   const TAU_V = 0.08;
-  const TUNING_TOTAL_ROUNDS = 10;
-  const TUNING_SAMPLE_INTERVAL_S = 0.1;
-  const TUNING_ROUND_DURATION_S = 4.0;
+  /** 与项目根 config.json 中 AI_TUNING_* 一致，启动时由 /api/tuning/ui-settings 覆盖 */
+  let tuningTotalRounds = 10;
+  let tuningSampleIntervalS = 0.1;
+  let tuningRoundDurationS = 4.0;
 
   let mode = "virtual"; // "virtual" | "serial"
   let chart;
@@ -421,10 +422,10 @@
   const markRoundDone = () => {
     tuningState.roundIndex += 1;
     resetRoundSampler();
-    if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) {
+    if (tuningState.roundIndex >= tuningTotalRounds) {
       tuningState.running = false;
       tuningState.finished = true;
-      $("vp-status").textContent = `运行中 · 调参完成（${TUNING_TOTAL_ROUNDS} 轮）`;
+      $("vp-status").textContent = `运行中 · 调参完成（${tuningTotalRounds} 轮）`;
     }
   };
 
@@ -432,7 +433,7 @@
     if (!tuningState.effectiveEnabled || mode !== "virtual") return;
     if (tuningState.finished) return;
     if (!simTimerId || tuningState.busy) return;
-    if (tuningState.roundIndex >= TUNING_TOTAL_ROUNDS) {
+    if (tuningState.roundIndex >= tuningTotalRounds) {
       tuningState.running = false;
       tuningState.finished = true;
       return;
@@ -442,15 +443,15 @@
       resetRoundSampler();
     }
     if (tuningState.roundStartT === null) tuningState.roundStartT = simT;
-    if (tuningState.sampleLastT === null) tuningState.sampleLastT = simT - TUNING_SAMPLE_INTERVAL_S;
+    if (tuningState.sampleLastT === null) tuningState.sampleLastT = simT - tuningSampleIntervalS;
 
-    if (simT - tuningState.sampleLastT >= TUNING_SAMPLE_INTERVAL_S) {
+    if (simT - tuningState.sampleLastT >= tuningSampleIntervalS) {
       tuningState.samples.push(buildSampleRow());
       tuningState.sampleLastT = simT;
     }
 
     const elapsed = simT - tuningState.roundStartT;
-    if (elapsed < TUNING_ROUND_DURATION_S) return;
+    if (elapsed < tuningRoundDurationS) return;
 
     const thisRound = tuningState.roundIndex + 1;
     tuningState.busy = true;
@@ -486,7 +487,7 @@
     chart.update();
     updateChartStats();
     const roundInfo = tuningState.effectiveEnabled
-      ? ` · 调参轮次 ${Math.min(tuningState.roundIndex + 1, TUNING_TOTAL_ROUNDS)}/${TUNING_TOTAL_ROUNDS}`
+      ? ` · 调参轮次 ${Math.min(tuningState.roundIndex + 1, tuningTotalRounds)}/${tuningTotalRounds}`
       : "";
     $("vp-status").textContent = `运行中 · t=${simT.toFixed(2)}s · y=${simY.toFixed(2)} · v=${simV.toFixed(2)}${roundInfo}`;
     $("chart-hint").textContent = `虚拟 PID · 三曲线 · 双纵轴 · 100Hz · Δt=${SIM_DT}s · 窗 ${WINDOW_S}s`;
@@ -593,6 +594,20 @@
     tuningState.pendingEnabled = Boolean($("vp-enable-tuning").checked);
     tuningState.effectiveEnabled = false;
     applyModeUI();
+
+    try {
+      const d = await api("/api/tuning/ui-settings");
+      if (d && typeof d === "object") {
+        const r = Number(d.rounds);
+        if (Number.isFinite(r)) tuningTotalRounds = Math.max(1, Math.floor(r));
+        const dur = Number(d.round_duration_seconds);
+        if (Number.isFinite(dur) && dur > 0) tuningRoundDurationS = dur;
+        const iv = Number(d.sample_interval_seconds);
+        if (Number.isFinite(iv) && iv > 0) tuningSampleIntervalS = iv;
+      }
+    } catch {
+      /* 使用与 config 缺省一致的页内默认值 */
+    }
 
     $("btn-mode-toggle").addEventListener("click", () => toggleMode());
     $("vp-enable-tuning").addEventListener("change", () => {

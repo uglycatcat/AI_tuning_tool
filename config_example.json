@@ -13,7 +13,10 @@
     "MODEL_INPUT_PRICE_PER_MTOK": "可选，每百万 input token 美元单价，用于日志估算；null 表示不写费用估算。",
     "MODEL_OUTPUT_PRICE_PER_MTOK": "可选，每百万 output token 美元单价。",
     "WEB_TOOL_HOST": "可选，python -m web_tool 监听地址；不设则 127.0.0.1。",
-    "WEB_TOOL_PORT": "可选，web 服务端口；不设则 8765。"
+    "WEB_TOOL_PORT": "可选，web 服务端口；不设则 8765。",
+    "AI_TUNING_REFERENCE_DURATION_SECONDS": "Web 虚拟 AI 调参：每轮送给模型的参考轨迹采样总时长（秒）。",
+    "AI_TUNING_REFERENCE_SAMPLE_RATE_HZ": "参考数据采样频率（Hz），前端按 1/频率 作为采样间隔；过高会夹到约 100Hz。",
+    "AI_TUNING_ROUNDS": "AI 调参向模型询问的总轮次（每轮采集一段数据后请求一次建议）。"
   },
   "LLM_API_KEY": "在此填写密钥",
   "BASE_URL": "https://c.loonaai.cn",
@@ -27,5 +30,8 @@
   "MODEL_INPUT_PRICE_PER_MTOK": null,
   "MODEL_OUTPUT_PRICE_PER_MTOK": null,
   "WEB_TOOL_HOST": "127.0.0.1",
-  "WEB_TOOL_PORT": 8765
+  "WEB_TOOL_PORT": 8765,
+  "AI_TUNING_REFERENCE_DURATION_SECONDS": 4.0,
+  "AI_TUNING_REFERENCE_SAMPLE_RATE_HZ": 10.0,
+  "AI_TUNING_ROUNDS": 10
 }

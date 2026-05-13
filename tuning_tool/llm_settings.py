@@ -16,6 +16,10 @@ DEFAULT_MAX_TOKENS = 4096
 DEFAULT_TIMEOUT = 120.0
 DEFAULT_USAGE_LOG = "token_usage_sessions.jsonl"
 
+DEFAULT_AI_TUNING_REFERENCE_DURATION_SECONDS = 4.0
+DEFAULT_AI_TUNING_REFERENCE_SAMPLE_RATE_HZ = 10.0
+DEFAULT_AI_TUNING_ROUNDS = 10
+
 USAGE_COUNT_KEYS: tuple[str, ...] = (
     "input_tokens",
     "output_tokens",
@@ -203,6 +207,38 @@ def web_tool_port_from_config(data: dict[str, Any]) -> int | None:
     return max(1, min(65535, p))
 
 
+def ai_tuning_reference_duration_seconds(data: Mapping[str, Any]) -> float:
+    """虚拟/ Web AI 调参：每轮送给模型的参考序列所覆盖的仿真时长（秒）。"""
+    return coerce_float(
+        data.get("AI_TUNING_REFERENCE_DURATION_SECONDS"),
+        DEFAULT_AI_TUNING_REFERENCE_DURATION_SECONDS,
+        min_v=0.1,
+        max_v=600.0,
+    )
+
+
+def ai_tuning_reference_sample_interval_seconds(data: Mapping[str, Any]) -> float:
+    """由 config 中的采样频率（Hz）换算为采样间隔，并夹在 [0.01, 120] 秒（与 100Hz 仿真步长兼容）。"""
+    rate_hz = coerce_float(
+        data.get("AI_TUNING_REFERENCE_SAMPLE_RATE_HZ"),
+        DEFAULT_AI_TUNING_REFERENCE_SAMPLE_RATE_HZ,
+        min_v=0.05,
+        max_v=500.0,
+    )
+    interval = 1.0 / rate_hz if rate_hz > 1e-9 else 0.1
+    return max(0.01, min(interval, 120.0))
+
+
+def ai_tuning_rounds(data: Mapping[str, Any]) -> int:
+    """向模型发起调参建议的总轮次（每轮一次询问）。"""
+    return coerce_int(
+        data.get("AI_TUNING_ROUNDS"),
+        DEFAULT_AI_TUNING_ROUNDS,
+        min_v=1,
+        max_v=500,
+    )
+
+
 __all__ = [
     "CONFIG_NAME",
     "DEFAULT_BASE_URL",
@@ -210,6 +246,9 @@ __all__ = [
     "DEFAULT_MAX_TOKENS",
     "DEFAULT_TIMEOUT",
     "DEFAULT_USAGE_LOG",
+    "DEFAULT_AI_TUNING_REFERENCE_DURATION_SECONDS",
+    "DEFAULT_AI_TUNING_REFERENCE_SAMPLE_RATE_HZ",
+    "DEFAULT_AI_TUNING_ROUNDS",
     "USAGE_COUNT_KEYS",
     "append_session_usage_log",
     "coerce_float",
@@ -226,4 +265,7 @@ __all__ = [
     "usage_counts",
     "web_tool_host_from_config",
     "web_tool_port_from_config",
+    "ai_tuning_reference_duration_seconds",
+    "ai_tuning_reference_sample_interval_seconds",
+    "ai_tuning_rounds",
 ]

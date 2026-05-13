@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from web_tool.app.config import static_dir
-from web_tool.app.routers import health, llm_debug, serial_debug
+from web_tool.app.routers import health, llm_debug, serial_debug, tuning_ui
 
 app = FastAPI(title="web_tool", version="0.1.0")
 
@@ -16,6 +16,7 @@ if _static.is_dir():
 app.include_router(health.router, prefix="/api")
 app.include_router(serial_debug.router, prefix="/api")
 app.include_router(llm_debug.router, prefix="/api")
+app.include_router(tuning_ui.router, prefix="/api")
 
 
 @app.get("/")
