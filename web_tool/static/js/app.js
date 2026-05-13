@@ -38,6 +38,7 @@
     promptPageIndex: -1,
     responsePageIndex: -1,
     historyRounds: [],
+    promptPageLatencyMs: [],
     busy: false,
     finished: false,
   };
@@ -104,6 +105,24 @@
     $(`${kind}-page-indicator`).textContent = `${display} / ${total}`;
     $(`${kind}-page-jump`).value = String(Math.max(1, display || 1));
     setPageText(kind, total ? pages[currentIndex] : "");
+    if (kind === "prompt") updatePromptRoundLatencyDisplay();
+  };
+
+  const updatePromptRoundLatencyDisplay = () => {
+    const el = $("prompt-round-trip-ms");
+    if (!el) return;
+    const idx = tuningState.promptPageIndex;
+    const arr = tuningState.promptPageLatencyMs;
+    if (idx < 0 || !arr.length || idx >= arr.length) {
+      el.textContent = "组装→响应：—";
+      return;
+    }
+    const v = arr[idx];
+    if (v == null || !Number.isFinite(v)) {
+      el.textContent = "组装→响应：—";
+    } else {
+      el.textContent = `组装→响应：${v.toFixed(1)} ms`;
+    }
   };
 
   const setPageIndex = (kind, nextIndex) => {
@@ -119,9 +138,14 @@
     updatePageUI(kind);
   };
 
-  const pushPage = (kind, text) => {
+  const pushPage = (kind, text, latencyMs) => {
     const pages = kind === "prompt" ? tuningState.promptPages : tuningState.responsePages;
     pages.push(text || "");
+    if (kind === "prompt") {
+      tuningState.promptPageLatencyMs.push(
+        typeof latencyMs === "number" && Number.isFinite(latencyMs) ? latencyMs : null
+      );
+    }
     setPageIndex(kind, pages.length - 1);
   };
 
@@ -131,6 +155,7 @@
     tuningState.promptPageIndex = -1;
     tuningState.responsePageIndex = -1;
     tuningState.historyRounds = [];
+    tuningState.promptPageLatencyMs = [];
     updatePageUI("prompt");
     updatePageUI("response");
   };
@@ -434,9 +459,11 @@
 
     const thisRound = tuningState.roundIndex + 1;
     tuningState.busy = true;
+    const t0 = performance.now();
     try {
       const resp = await runTuningRound(tuningState.samples, thisRound);
-      pushPage("prompt", String(resp.prompt_text || ""));
+      const elapsedMs = performance.now() - t0;
+      pushPage("prompt", String(resp.prompt_text || ""), elapsedMs);
       pushPage("response", String(resp.response_text || ""));
       if (resp && resp.parsed_pid) setPidInputs(resp.parsed_pid);
       tuningState.historyRounds.push({
@@ -446,6 +473,8 @@
       });
       markRoundDone();
     } catch (e) {
+      const elapsedMs = performance.now() - t0;
+      pushPage("prompt", "", elapsedMs);
       pushPage("response", `第 ${thisRound} 轮失败：${e.message}`);
       markRoundDone();
     } finally {
