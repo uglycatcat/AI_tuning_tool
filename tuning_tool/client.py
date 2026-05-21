@@ -4,28 +4,17 @@
 
 from __future__ import annotations
 
-import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict
 
 from tuning_tool.llm_settings import (
-    DEFAULT_BASE_URL,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_MODEL,
-    DEFAULT_TIMEOUT,
-    DEFAULT_USAGE_LOG,
     USAGE_COUNT_KEYS,
     append_session_usage_log,
-    coerce_float,
-    coerce_int,
     extract_text_blocks,
+    load_runtime_settings,
     now_iso,
-    optional_price,
-    project_root,
-    read_root_config,
-    resolve_usage_log_path,
     usage_counts,
 )
 
@@ -48,55 +37,8 @@ class Settings:
 
 
 def load_settings() -> Settings:
-    data = read_root_config()
-    root = project_root()
-    api_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip() or str(
-        data.get("LLM_API_KEY", "")
-    ).strip()
-    base_url = (
-        os.environ.get("ANTHROPIC_BASE_URL", "").strip()
-        or str(data.get("BASE_URL", "")).strip()
-        or DEFAULT_BASE_URL
-    ).rstrip("/")
-    model = (
-        os.environ.get("ANTHROPIC_MODEL", "").strip()
-        or str(data.get("MODEL", "")).strip()
-        or DEFAULT_MODEL
-    )
-    max_tokens = coerce_int(
-        os.environ.get("ANTHROPIC_MAX_TOKENS", "") or data.get("MAX_TOKENS"),
-        DEFAULT_MAX_TOKENS,
-        min_v=1,
-        max_v=200_000,
-    )
-    timeout = coerce_float(
-        os.environ.get("ANTHROPIC_TIMEOUT", "") or data.get("REQUEST_TIMEOUT_SECONDS"),
-        DEFAULT_TIMEOUT,
-        min_v=5.0,
-        max_v=600.0,
-    )
-    usage_log_path = resolve_usage_log_path(data, root=root)
-    max_retries = coerce_int(
-        os.environ.get("ANTHROPIC_MAX_RETRIES", "") or data.get("REQUEST_MAX_RETRIES"),
-        DEFAULT_MAX_RETRIES,
-        min_v=0,
-        max_v=15,
-    )
-    retry_base_delay_seconds = coerce_float(
-        os.environ.get("ANTHROPIC_RETRY_BASE_DELAY_SECONDS", "")
-        or data.get("REQUEST_RETRY_BASE_DELAY_SECONDS"),
-        DEFAULT_RETRY_BASE_DELAY_SECONDS,
-        min_v=0.05,
-        max_v=60.0,
-    )
-    in_price = optional_price(
-        os.environ.get("MODEL_INPUT_PRICE_PER_MTOK", "")
-        or data.get("MODEL_INPUT_PRICE_PER_MTOK")
-    )
-    out_price = optional_price(
-        os.environ.get("MODEL_OUTPUT_PRICE_PER_MTOK", "")
-        or data.get("MODEL_OUTPUT_PRICE_PER_MTOK")
-    )
+    cfg = load_runtime_settings(include_retry=True)
+    api_key = str(cfg["api_key"])
 
     if not api_key:
         raise RuntimeError(
@@ -105,15 +47,17 @@ def load_settings() -> Settings:
 
     return Settings(
         api_key=api_key,
-        base_url=base_url,
-        model=model,
-        max_tokens=max_tokens,
-        timeout=timeout,
-        usage_log_path=usage_log_path,
-        input_price_per_mtok=in_price,
-        output_price_per_mtok=out_price,
-        max_retries=max_retries,
-        retry_base_delay_seconds=retry_base_delay_seconds,
+        base_url=str(cfg["base_url"]),
+        model=str(cfg["model"]),
+        max_tokens=int(cfg["max_tokens"]),
+        timeout=float(cfg["timeout"]),
+        usage_log_path=cfg["usage_log_path"],
+        input_price_per_mtok=cfg.get("input_price_per_mtok"),
+        output_price_per_mtok=cfg.get("output_price_per_mtok"),
+        max_retries=int(cfg.get("max_retries", DEFAULT_MAX_RETRIES)),
+        retry_base_delay_seconds=float(
+            cfg.get("retry_base_delay_seconds", DEFAULT_RETRY_BASE_DELAY_SECONDS)
+        ),
     )
 
 
@@ -216,6 +160,5 @@ def request_once(*, system: str, user: str) -> Dict[str, Any]:
 
 __all__ = [
     "load_settings",
-    "extract_text_blocks",
     "request_once",
 ]

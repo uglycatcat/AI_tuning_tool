@@ -11,6 +11,12 @@
   let tuningTotalRounds = 10;
   let tuningSampleIntervalS = 0.1;
   let tuningRoundDurationS = 4.0;
+  const SERIAL_CMD = {
+    stop: "debug_pid_ai_tuning stop",
+    start: (period, amp, off) => `debug_pid_ai_tuning start [${period},${amp},${off}]`,
+    setPid: (p, i, d) => `set_pid[${p},${i},${d}]`,
+    setParam: (period, amp, off) => `set_param[${period},${amp},${off}]`,
+  };
 
   let mode = "virtual"; // "virtual" | "serial"
   /** @type {WebSocket | null} */
@@ -93,6 +99,9 @@
     }
     return data;
   };
+
+  const sendSerialLine = async (line) =>
+    api("/api/serial/send", { method: "POST", body: JSON.stringify({ line }) });
 
   const readFloat = (id, fallback) => {
     const v = parseFloat(String($(id).value || ""));
@@ -209,6 +218,26 @@
     while (bufError.length && bufError[0].x < tMin) bufError.shift();
   };
 
+  const clearChartBuffers = () => {
+    bufTarget.length = 0;
+    bufActual.length = 0;
+    bufError.length = 0;
+  };
+
+  const setChartRange = (min, max) => {
+    if (!chart) return;
+    chart.options.scales.x.min = min;
+    chart.options.scales.x.max = max;
+  };
+
+  const resetChartFrame = (min, max) => {
+    ensureChart();
+    syncChartBuffers();
+    setChartRange(min, max);
+    chart.update();
+    updateChartStats();
+  };
+
   const syncChartBuffers = () => {
     if (!chart) return;
     chart.data.datasets[0].data = bufTarget;
@@ -238,6 +267,13 @@
   const ensureChart = () => {
     const canvas = $("pid-chart");
     if (chart) return;
+    const css = getComputedStyle(document.documentElement);
+    const cMuted = css.getPropertyValue("--muted").trim() || "#9a9a9a";
+    const cBorder = css.getPropertyValue("--border").trim() || "#2e2e2e";
+    const cTarget = css.getPropertyValue("--chart-target").trim() || "#5ec8e8";
+    const cActual = css.getPropertyValue("--chart-actual").trim() || "#e8c27a";
+    const cError = css.getPropertyValue("--chart-error").trim() || "#c89ef0";
+    const cLegend = css.getPropertyValue("--chart-legend").trim() || "#e0e0e0";
     chart = new Chart(canvas, {
       type: "line",
       data: {
@@ -246,7 +282,7 @@
             label: "目标",
             data: bufTarget,
             yAxisID: "y",
-            borderColor: "#5ec8e8",
+            borderColor: cTarget,
             borderWidth: 1.75,
             borderDash: [10, 5],
             tension: 0.2,
@@ -257,7 +293,7 @@
             label: "实际",
             data: bufActual,
             yAxisID: "y",
-            borderColor: "#e8c27a",
+            borderColor: cActual,
             borderWidth: 2.35,
             tension: 0.18,
             pointRadius: 0,
@@ -267,7 +303,7 @@
             label: "误差 (r−y)",
             data: bufError,
             yAxisID: "y1",
-            borderColor: "#c89ef0",
+            borderColor: cError,
             borderWidth: 1.6,
             borderDash: [4, 4],
             tension: 0.12,
@@ -284,26 +320,26 @@
         scales: {
           x: {
             type: "linear",
-            title: { display: true, text: "时间 (s)", color: "#9a9a9a" },
-            ticks: { color: "#9a9a9a", maxTicksLimit: 8 },
-            grid: { color: "#2e2e2e" },
+            title: { display: true, text: "时间 (s)", color: cMuted },
+            ticks: { color: cMuted, maxTicksLimit: 8 },
+            grid: { color: cBorder },
           },
           y: {
             position: "left",
-            title: { display: true, text: "位置", color: "#9a9a9a" },
-            ticks: { color: "#9a9a9a" },
-            grid: { color: "#2e2e2e" },
+            title: { display: true, text: "位置", color: cMuted },
+            ticks: { color: cMuted },
+            grid: { color: cBorder },
           },
           y1: {
             type: "linear",
             position: "right",
-            title: { display: true, text: "误差", color: "#c89ef0" },
-            ticks: { color: "#c4a8e0" },
+            title: { display: true, text: "误差", color: cError },
+            ticks: { color: cError },
             grid: { drawOnChartArea: false },
           },
         },
         plugins: {
-          legend: { labels: { color: "#e0e0e0" } },
+          legend: { labels: { color: cLegend } },
         },
       },
     });
@@ -316,15 +352,8 @@
   };
 
   const updateChartSerialEmpty = () => {
-    ensureChart();
-    bufTarget.length = 0;
-    bufActual.length = 0;
-    bufError.length = 0;
-    syncChartBuffers();
-    chart.options.scales.x.min = undefined;
-    chart.options.scales.x.max = undefined;
-    chart.update();
-    updateChartStats();
+    clearChartBuffers();
+    resetChartFrame(undefined, undefined);
   };
 
   const renderSerialFrame = (t, force = false) => {
@@ -347,9 +376,7 @@
     simLastVCmd = 0;
     simInt = 0;
     simPrevE = null;
-    bufTarget.length = 0;
-    bufActual.length = 0;
-    bufError.length = 0;
+    clearChartBuffers();
   };
 
   const resetRoundSampler = () => {
@@ -400,19 +427,15 @@
     simT += dt;
   };
 
-  const setPidInputs = (pid) => {
+  const setPidInputsByPrefix = (prefix, pid) => {
     if (!pid || typeof pid !== "object") return;
-    if (Number.isFinite(pid.p)) $("vp-p").value = String(pid.p);
-    if (Number.isFinite(pid.i)) $("vp-i").value = String(pid.i);
-    if (Number.isFinite(pid.d)) $("vp-d").value = String(pid.d);
+    if (Number.isFinite(pid.p)) $(`${prefix}-p`).value = String(pid.p);
+    if (Number.isFinite(pid.i)) $(`${prefix}-i`).value = String(pid.i);
+    if (Number.isFinite(pid.d)) $(`${prefix}-d`).value = String(pid.d);
   };
 
-  const setSpPidInputs = (pid) => {
-    if (!pid || typeof pid !== "object") return;
-    if (Number.isFinite(pid.p)) $("sp-p").value = String(pid.p);
-    if (Number.isFinite(pid.i)) $("sp-i").value = String(pid.i);
-    if (Number.isFinite(pid.d)) $("sp-d").value = String(pid.d);
-  };
+  const setPidInputs = (pid) => setPidInputsByPrefix("vp", pid);
+  const setSpPidInputs = (pid) => setPidInputsByPrefix("sp", pid);
 
   const buildSampleRow = () => {
     const nowMs = simT * 1000;
@@ -493,6 +516,61 @@
     }
   };
 
+  const collectRoundSample = (t, sample) => {
+    if (!tuningState.running) {
+      tuningState.running = true;
+      resetRoundSampler();
+    }
+    if (tuningState.roundStartT === null) tuningState.roundStartT = t;
+    if (tuningState.sampleLastT === null) tuningState.sampleLastT = t - tuningSampleIntervalS;
+    if (t - tuningState.sampleLastT >= tuningSampleIntervalS) {
+      tuningState.samples.push(sample);
+      tuningState.sampleLastT = t;
+    }
+    const elapsed = t - tuningState.roundStartT;
+    if (elapsed < tuningRoundDurationS) return null;
+    return tuningState.roundIndex + 1;
+  };
+
+  const runRoundRequest = async ({
+    thisRound,
+    plantProfile,
+    session,
+    staleGuard = () => false,
+    onApplyPid = null,
+    onSuccess = null,
+    onError = null,
+  }) => {
+    tuningState.busy = true;
+    const t0 = performance.now();
+    try {
+      const resp = await runTuningRound(tuningState.samples, thisRound, plantProfile, session);
+      const elapsedMs = performance.now() - t0;
+      if (staleGuard()) return;
+      pushPage("prompt", String(resp.prompt_text || ""), elapsedMs);
+      pushPage("response", String(resp.response_text || ""));
+      if (onApplyPid && resp && resp.parsed_pid) {
+        await onApplyPid(resp.parsed_pid);
+      }
+      tuningState.historyRounds.push({
+        round: thisRound,
+        pid: resp.parsed_pid || {},
+        summary: String(resp.raw_response_text || "").replace(/\s+/g, " ").slice(0, 240),
+      });
+      markRoundDone();
+      if (onSuccess) onSuccess(thisRound);
+    } catch (e) {
+      if (staleGuard()) return;
+      const elapsedMs = performance.now() - t0;
+      pushPage("prompt", "", elapsedMs);
+      pushPage("response", `第 ${thisRound} 轮失败：${e.message}`);
+      markRoundDone();
+      if (onError) onError(thisRound, e);
+    } finally {
+      tuningState.busy = false;
+    }
+  };
+
   const tickTuning = async () => {
     if (!tuningState.effectiveEnabled || mode !== "virtual") return;
     if (tuningState.finished) return;
@@ -502,44 +580,14 @@
       tuningState.finished = true;
       return;
     }
-    if (!tuningState.running) {
-      tuningState.running = true;
-      resetRoundSampler();
-    }
-    if (tuningState.roundStartT === null) tuningState.roundStartT = simT;
-    if (tuningState.sampleLastT === null) tuningState.sampleLastT = simT - tuningSampleIntervalS;
-
-    if (simT - tuningState.sampleLastT >= tuningSampleIntervalS) {
-      tuningState.samples.push(buildSampleRow());
-      tuningState.sampleLastT = simT;
-    }
-
-    const elapsed = simT - tuningState.roundStartT;
-    if (elapsed < tuningRoundDurationS) return;
-
-    const thisRound = tuningState.roundIndex + 1;
-    tuningState.busy = true;
-    const t0 = performance.now();
-    try {
-      const resp = await runTuningRound(tuningState.samples, thisRound, "virtual_tracking", "virtual");
-      const elapsedMs = performance.now() - t0;
-      pushPage("prompt", String(resp.prompt_text || ""), elapsedMs);
-      pushPage("response", String(resp.response_text || ""));
-      if (resp && resp.parsed_pid) setPidInputs(resp.parsed_pid);
-      tuningState.historyRounds.push({
-        round: thisRound,
-        pid: resp.parsed_pid || {},
-        summary: String(resp.raw_response_text || "").replace(/\s+/g, " ").slice(0, 240),
-      });
-      markRoundDone();
-    } catch (e) {
-      const elapsedMs = performance.now() - t0;
-      pushPage("prompt", "", elapsedMs);
-      pushPage("response", `第 ${thisRound} 轮失败：${e.message}`);
-      markRoundDone();
-    } finally {
-      tuningState.busy = false;
-    }
+    const thisRound = collectRoundSample(simT, buildSampleRow());
+    if (!thisRound) return;
+    await runRoundRequest({
+      thisRound,
+      plantProfile: "virtual_tracking",
+      session: "virtual",
+      onApplyPid: async (pid) => setPidInputs(pid),
+    });
   };
 
   const tickSerialTuning = async (data) => {
@@ -555,72 +603,36 @@
     const t = Number(data.t);
     if (!Number.isFinite(t)) return;
 
-    if (!tuningState.running) {
-      tuningState.running = true;
-      resetRoundSampler();
-    }
-    if (tuningState.roundStartT === null) tuningState.roundStartT = t;
-    if (tuningState.sampleLastT === null) tuningState.sampleLastT = t - tuningSampleIntervalS;
-
-    if (t - tuningState.sampleLastT >= tuningSampleIntervalS) {
-      tuningState.samples.push(buildSerialSampleRow(data));
-      tuningState.sampleLastT = t;
-    }
-
-    const elapsed = t - tuningState.roundStartT;
-    if (elapsed < tuningRoundDurationS) return;
-
-    const thisRound = tuningState.roundIndex + 1;
+    const thisRound = collectRoundSample(t, buildSerialSampleRow(data));
+    if (!thisRound) return;
     const roundGeneration = tuningState.serialSessionGeneration;
-    tuningState.busy = true;
-    const t0 = performance.now();
-    try {
-      const resp = await runTuningRound(tuningState.samples, thisRound, "hardware_step", "serial");
-      const elapsedMs = performance.now() - t0;
-      if (
-        roundGeneration !== tuningState.serialSessionGeneration ||
-        mode !== "serial" ||
-        !tuningState.serialEffectiveTuning
-      ) {
-        return;
-      }
-      pushPage("prompt", String(resp.prompt_text || ""), elapsedMs);
-      pushPage("response", String(resp.response_text || ""));
-      if (resp && resp.parsed_pid) {
-        setSpPidInputs(resp.parsed_pid);
+    const staleGuard = () =>
+      roundGeneration !== tuningState.serialSessionGeneration ||
+      mode !== "serial" ||
+      !tuningState.serialEffectiveTuning;
+    await runRoundRequest({
+      thisRound,
+      plantProfile: "hardware_step",
+      session: "serial",
+      staleGuard,
+      onApplyPid: async (pid) => {
+        setSpPidInputs(pid);
         const p = readFloat("sp-p", 0);
         const i = readFloat("sp-i", 0);
         const d = readFloat("sp-d", 0);
-        const line = `set_pid[${p},${i},${d}]`;
         try {
-          await api("/api/serial/send", { method: "POST", body: JSON.stringify({ line }) });
+          await sendSerialLine(SERIAL_CMD.setPid(p, i, d));
         } catch {
           /* 静默 */
         }
-      }
-      tuningState.historyRounds.push({
-        round: thisRound,
-        pid: resp.parsed_pid || {},
-        summary: String(resp.raw_response_text || "").replace(/\s+/g, " ").slice(0, 240),
-      });
-      markRoundDone();
-      setSerialStatus(`调参第 ${thisRound} 轮完成；已尝试下发 set_pid（若串口仍连接）`);
-    } catch (e) {
-      if (
-        roundGeneration !== tuningState.serialSessionGeneration ||
-        mode !== "serial" ||
-        !tuningState.serialEffectiveTuning
-      ) {
-        return;
-      }
-      const elapsedMs = performance.now() - t0;
-      pushPage("prompt", "", elapsedMs);
-      pushPage("response", `第 ${thisRound} 轮失败：${e.message}`);
-      markRoundDone();
-      setSerialStatus(`调参第 ${thisRound} 轮失败：${e.message}`);
-    } finally {
-      tuningState.busy = false;
-    }
+      },
+      onSuccess: (round) => {
+        setSerialStatus(`调参第 ${round} 轮完成；已尝试下发 set_pid（若串口仍连接）`);
+      },
+      onError: (round, err) => {
+        setSerialStatus(`调参第 ${round} 轮失败：${err.message}`);
+      },
+    });
   };
 
   const tickVirtual = () => {
@@ -771,12 +783,8 @@
       const p = readFloat("sp-p", 0);
       const i = readFloat("sp-i", 0);
       const d = readFloat("sp-d", 0);
-      const line = `set_pid[${p},${i},${d}]`;
       try {
-        await api("/api/serial/send", {
-          method: "POST",
-          body: JSON.stringify({ line }),
-        });
+        await sendSerialLine(SERIAL_CMD.setPid(p, i, d));
       } catch {
         /* 静默失败，避免打断调参 */
       }
@@ -791,12 +799,8 @@
       const period = readFloat("sp-period", 4);
       const amp = readFloat("sp-amp", 10);
       const off = readFloat("sp-offset", 50);
-      const line = `set_param[${period},${amp},${off}]`;
       try {
-        await api("/api/serial/send", {
-          method: "POST",
-          body: JSON.stringify({ line }),
-        });
+        await sendSerialLine(SERIAL_CMD.setParam(period, amp, off));
       } catch {
         /* 静默失败，避免打断调参 */
       }
@@ -869,10 +873,7 @@
     } else {
       ensureChart();
       syncChartBuffers();
-      chart.options.scales.x.min = 0;
-      chart.options.scales.x.max = WINDOW_S;
-      chart.update();
-      updateChartStats();
+      resetChartFrame(0, WINDOW_S);
     }
   };
 
@@ -888,10 +889,7 @@
     clearPagedLogs();
     resetTuningRuntime();
     syncChartBuffers();
-    chart.options.scales.x.min = 0;
-    chart.options.scales.x.max = WINDOW_S;
-    chart.update();
-    updateChartStats();
+    resetChartFrame(0, WINDOW_S);
     $("chart-hint").textContent = `虚拟 PID · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
     tuningState.pendingEnabled = Boolean($("vp-enable-tuning").checked);
     tuningState.effectiveEnabled = false;
@@ -949,11 +947,7 @@
       updateTuningEffectiveLabels();
       $("vp-status").textContent = "已停止";
       ensureChart();
-      syncChartBuffers();
-      chart.options.scales.x.min = 0;
-      chart.options.scales.x.max = WINDOW_S;
-      chart.update();
-      updateChartStats();
+      resetChartFrame(0, WINDOW_S);
     });
 
     $("btn-serial-refresh").addEventListener("click", async () => {
@@ -1006,26 +1000,14 @@
       if (mode !== "serial") return;
       if (serialConnected) {
         try {
-          await api("/api/serial/send", {
-            method: "POST",
-            body: JSON.stringify({ line: "debug_pid_ai_tuning stop" }),
-          });
+          await sendSerialLine(SERIAL_CMD.stop);
         } catch {
           /* 重启以本地状态复位为主，不阻断 */
         }
       }
-      bufTarget.length = 0;
-      bufActual.length = 0;
-      bufError.length = 0;
+      clearChartBuffers();
       serialLastSample = null;
-      ensureChart();
-      syncChartBuffers();
-      if (chart) {
-        chart.options.scales.x.min = undefined;
-        chart.options.scales.x.max = undefined;
-        chart.update();
-      }
-      updateChartStats();
+      resetChartFrame(undefined, undefined);
       tuningState.serialSessionGeneration += 1;
       resetTuningRuntime();
       clearPagedLogs();
@@ -1047,27 +1029,16 @@
       const period = readFloat("sp-period", 4);
       const amp = readFloat("sp-amp", 10);
       const off = readFloat("sp-offset", 50);
-      const line = `debug_pid_ai_tuning start [${period},${amp},${off}]`;
       try {
         tuningState.serialSessionGeneration += 1;
         resetTuningRuntime();
-        await api("/api/serial/send", {
-          method: "POST",
-          body: JSON.stringify({ line }),
-        });
-        bufTarget.length = 0;
-        bufActual.length = 0;
-        bufError.length = 0;
+        await sendSerialLine(SERIAL_CMD.start(period, amp, off));
+        clearChartBuffers();
         serialLastSample = null;
         serialDeviceRunning = true;
         serialDisplayPaused = false;
         serialAwaitingSample = true;
-        ensureChart();
-        syncChartBuffers();
-        chart.options.scales.x.min = undefined;
-        chart.options.scales.x.max = undefined;
-        chart.update();
-        updateChartStats();
+        resetChartFrame(undefined, undefined);
         updateSerialButtons();
         setSerialStatus("没有收到数据");
       } catch (e) {
@@ -1098,10 +1069,7 @@
         return;
       }
       try {
-        await api("/api/serial/send", {
-          method: "POST",
-          body: JSON.stringify({ line: "debug_pid_ai_tuning stop" }),
-        });
+        await sendSerialLine(SERIAL_CMD.stop);
         serialDeviceRunning = false;
         serialDisplayPaused = false;
         serialAwaitingSample = false;

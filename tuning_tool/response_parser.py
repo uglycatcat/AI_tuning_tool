@@ -28,7 +28,6 @@ _PID_TRIPLET_RE = re.compile(
 )
 _STATUS_RE = re.compile(r"\b(DONE|TUNING)\b", re.IGNORECASE)
 
-# 单环 PID 输出收紧：与 default_prompt.json 中 system 硬约束一致（可在此调参）
 REQUIRED_OUTPUT_KEYS = (
     "thought_process",
     "analysis_summary",
@@ -38,12 +37,44 @@ REQUIRED_OUTPUT_KEYS = (
     "d",
     "status",
 )
-_MAX_LEN = {
-    "thought_process": 2000,
-    "analysis_summary": 1200,
-    "tuning_action": 800,
-}
-_PID_CEIL = {"p": 100.0, "i": 30.0, "d": 20.0}
+_CONSTRAINTS_CACHE: Dict[str, Any] | None = None
+
+
+def _load_output_constraints() -> Dict[str, Any]:
+    global _CONSTRAINTS_CACHE
+    if _CONSTRAINTS_CACHE is not None:
+        return _CONSTRAINTS_CACHE
+    default = {
+        "max_len": {"thought_process": 2000, "analysis_summary": 1200, "tuning_action": 800},
+        "pid_ceil": {"p": 100.0, "i": 30.0, "d": 20.0},
+    }
+    cfg_path = Path(__file__).resolve().parent / "default_prompt.json"
+    try:
+        data = json.loads(cfg_path.read_text(encoding="utf-8"))
+        oc = data.get("output_constraints")
+        if isinstance(oc, dict):
+            max_len = oc.get("max_len")
+            pid_ceil = oc.get("pid_ceil")
+            if isinstance(max_len, dict):
+                default["max_len"].update(
+                    {
+                        k: int(v)
+                        for k, v in max_len.items()
+                        if k in default["max_len"] and isinstance(v, (int, float))
+                    }
+                )
+            if isinstance(pid_ceil, dict):
+                default["pid_ceil"].update(
+                    {
+                        k: float(v)
+                        for k, v in pid_ceil.items()
+                        if k in default["pid_ceil"] and isinstance(v, (int, float))
+                    }
+                )
+    except Exception:
+        pass
+    _CONSTRAINTS_CACHE = default
+    return default
 
 
 def _coerce_text(value: Any) -> str:
@@ -76,7 +107,7 @@ def _strip_markdown_heading_lines(text: str) -> str:
 
 
 def _clamp_pid(name: str, v: float, issues: List[str]) -> float:
-    hi = float(_PID_CEIL.get(name, 1e9))
+    hi = float(_load_output_constraints()["pid_ceil"].get(name, 1e9))
     if v > hi:
         issues.append(f"clamp {name}: {v} -> {hi}")
         return hi
@@ -119,7 +150,7 @@ def finalize_llm_output(
         raw = _strip_inline_fences(raw)
         raw = _strip_markdown_heading_lines(raw)
         raw = raw.strip()
-        lim = int(_MAX_LEN.get(text_key, 4000))
+        lim = int(_load_output_constraints()["max_len"].get(text_key, 4000))
         if len(raw) > lim:
             issues.append(f"truncate {text_key}: {len(raw)} -> {lim}")
             raw = raw[:lim].rstrip()

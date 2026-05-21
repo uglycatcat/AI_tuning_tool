@@ -37,6 +37,32 @@
         "- Treat explicit user preferences as stronger constraints than the default tuning heuristic.",
         "- {summary}"
       ]
+    },
+    "prompt_data": {
+      "section_current_status": "## Current Status",
+      "line_setpoint_static": "- 设定值 (Setpoint): {setpoint}",
+      "line_setpoint_dynamic_range": "- 设定值轨迹 r(t): 时变 · 区间内 min={setpoint_min}, max={setpoint_max}, span≈{setpoint_span}",
+      "line_setpoint_dynamic_last": "- 窗口末刻 r(t_last): {setpoint_last} （勿将整条窗口误判为恒定阶跃给定）",
+      "line_pid": "- 当前 PID: P={p}, I={i}, D={d}",
+      "line_mae": "- 平均绝对误差 MAE(|e|): {avg_error}",
+      "line_max_error": "- 最大绝对误差: {max_error}",
+      "line_rms": "- RMS(跟踪误差 e=r-y): {rms_tracking_error}",
+      "line_peak_overshoot_dynamic": "- 瞬时相对超调峰: max_t max(0,(y−r)/|r|)·100 ≈ {tracking_peak_overshoot_instant_pct}%",
+      "line_overshoot_note_dynamic": "- 定点阶跃语义超调%: （给定随时间变化，此项不作为主判据，已弱化）",
+      "line_zero_cross_note_dynamic": "- 误差过零点次数（仅供参考，给定随时间变化时勿单独推断振荡）:",
+      "line_zero_cross_count_dynamic": "  count={zero_crossings}",
+      "line_overshoot_static": "- 超调量(近似恒定给定): {overshoot}%",
+      "line_oscillation_static": "- 震荡检测: 过零点 {zero_crossings} 次 (状态: {status})",
+      "line_steady_state_error": "- 稳态误差估算(末段20%均值): {steady_state_error}",
+      "line_status": "- 状态摘要: {status}",
+      "time_varying_note_title": "## 给定模式说明（自动）",
+      "time_varying_note_bullets": [
+        "- 本窗口数据表明给定 r(t) 随时间显著变化。调参目标是跟踪波形而非单点爬坡。",
+        "- 禁止仅用「看起来像正弦振荡」推断临界增益自持振荡；需结合能否跟上 r(t) 的 RMS/相位滞后。",
+        "- Phase 仍可分 P→I→D，但请以跟踪 RMS 下降 / 瞬时超调可控为主要优化信号。"
+      ],
+      "timeseries_title": "## 时间序列数据摘要 (采样 {sample_count} 点):",
+      "timeseries_header": "SimTime(ms), Input, PWM, Error"
     }
   },
   "context": {
@@ -48,6 +74,28 @@
     "guardrail_hints": {
       "hardware_step": "Keep P within about 3x the current value, and keep I/D within about 4x. Prefer smaller moves when approaching stability boundaries.",
       "virtual_tracking": "Simulation tracking ok: span P adjustments up to about 4x when RMS/MAE vs setpoint span is still clearly poor; shrink to ≤1.5× or additive micro-steps when already close; never jump all of P+I+D sharply in one shot."
+    },
+    "profile_defaults": {
+      "hardware_step": {
+        "source": "serial_hardware",
+        "tuning_style": "conservative_hardware_safe"
+      },
+      "virtual_tracking": {
+        "source": "virtual_pid_simulation",
+        "tuning_style": "sim_tracking_exploratory"
+      }
+    }
+  },
+  "output_constraints": {
+    "max_len": {
+      "thought_process": 2000,
+      "analysis_summary": 1200,
+      "tuning_action": 800
+    },
+    "pid_ceil": {
+      "p": 100.0,
+      "i": 30.0,
+      "d": 20.0
     }
   }
 }

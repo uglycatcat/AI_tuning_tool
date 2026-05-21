@@ -8,19 +8,14 @@ import serial
 from serial.tools import list_ports as list_ports_mod
 
 from tuning_tool.llm_settings import read_root_config
-
-_PREFIX = "pid_tuning_param["
-_SUFFIX = "]"
+from web_tool.services.protocol import parse_pid_tuning_line
 
 _lock = threading.Lock()
 _ser: serial.Serial | None = None
 _reader: threading.Thread | None = None
 _stop = threading.Event()
 _out_q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=512)
-_ingest_paused = False
 _ts_scale: float | None = None
-_port_label = ""
-_baud_label = 0
 
 
 def _coerce_bool(v: object, default: bool) -> bool:
@@ -84,25 +79,6 @@ def _timestamp_scale(first_raw: float) -> float:
     if a >= 1e9:
         return 1e-3
     return 1.0
-
-
-def parse_pid_tuning_line(line: str) -> dict[str, float] | None:
-    s = line.strip()
-    if not (s.startswith(_PREFIX) and s.endswith(_SUFFIX)):
-        return None
-    inner = s[len(_PREFIX) : -len(_SUFFIX)]
-    parts = inner.split(",")
-    if len(parts) != 8:
-        return None
-    out: dict[str, float] = {}
-    keys = ("timestamp", "setpoint", "input", "pwm", "error", "p", "i", "d")
-    for k, p in zip(keys, parts, strict=True):
-        p = p.strip()
-        try:
-            out[k] = float(p)
-        except ValueError:
-            return None
-    return out
 
 
 def list_ports() -> list[str]:
@@ -177,7 +153,7 @@ def _start_reader() -> None:
 
 
 def connect(port: str, baudrate: int) -> dict[str, Any]:
-    global _ser, _ts_scale, _port_label, _baud_label
+    global _ser, _ts_scale
     port = (port or "").strip()
     if not port:
         return {"status": "error", "message": "端口为空", "port": "", "baudrate": str(int(baudrate))}
@@ -211,14 +187,12 @@ def connect(port: str, baudrate: int) -> dict[str, Any]:
             pass
         _ser = ser
         _ts_scale = None
-        _port_label = port
-        _baud_label = baud
     _start_reader()
     return {"status": "ok", "message": "已连接", "port": port, "baudrate": str(baud)}
 
 
 def disconnect_unlocked() -> None:
-    global _ser, _reader, _ts_scale, _ingest_paused
+    global _ser, _reader, _ts_scale
     _stop.set()
     if _reader is not None:
         th = _reader
@@ -232,7 +206,6 @@ def disconnect_unlocked() -> None:
                 pass
             _ser = None
         _ts_scale = None
-        _ingest_paused = False
     while True:
         try:
             _out_q.get_nowait()
@@ -261,30 +234,6 @@ def send_line(line: str) -> dict[str, Any]:
     except (serial.SerialException, OSError, ValueError) as e:
         return {"status": "error", "message": str(e)}
     return {"status": "ok", "message": "已发送"}
-
-
-def set_ingest_paused(paused: bool) -> dict[str, Any]:
-    global _ingest_paused
-    with _lock:
-        _ingest_paused = bool(paused)
-    return {"status": "ok", "paused": bool(paused)}
-
-
-def ingest_paused() -> bool:
-    with _lock:
-        return _ingest_paused
-
-
-def status() -> dict[str, Any]:
-    with _lock:
-        connected = _ser is not None and getattr(_ser, "is_open", False)
-        return {
-            "status": "connected" if connected else "disconnected",
-            "message": "已连接" if connected else "未连接",
-            "port": _port_label if connected else "",
-            "baudrate": str(_baud_label) if connected else "0",
-            "ingest_paused": _ingest_paused,
-        }
 
 
 def pop_event(timeout: float) -> dict[str, Any] | None:

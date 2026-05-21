@@ -5,24 +5,15 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from tuning_tool.client import request_once
-from tuning_tool.prompt_concat import build_full_prompt
+from tuning_tool.llm_settings import project_root
+from tuning_tool.prompt_concat import build_full_prompt, resolve_plant_profile
+from tuning_tool.prompt_display import format_prompt_messages
 from tuning_tool.response_parser import append_capture_to_output2_log, parse_json_response
-
-_CSV_FIELDS = ("timestamp", "setpoint", "input", "pwm", "error", "p", "i", "d")
-
-
-def _normalize_plant_profile(raw: Any) -> str:
-    pv = str(raw or "").strip().lower().replace("-", "_")
-    return "virtual_tracking" if pv == "virtual_tracking" else "hardware_step"
-
-
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
+from web_tool.services.protocol import SERIAL_SAMPLE_FIELDS, normalize_sample_row
 
 def _ensure_round_dir(session: str = "virtual") -> Path:
     sub = "serial_rounds" if str(session).strip().lower() == "serial" else "virtual_rounds"
-    out_dir = _project_root() / "web_tool" / "runtime" / sub
+    out_dir = project_root() / "web_tool" / "runtime" / sub
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -41,7 +32,7 @@ def _normalize_samples(raw_samples: Any) -> list[dict[str, float]]:
     for row in raw_samples:
         if not isinstance(row, Mapping):
             continue
-        out.append({field: _coerce_float(row.get(field), 0.0) for field in _CSV_FIELDS})
+        out.append(normalize_sample_row(row))
     return out
 
 
@@ -49,30 +40,11 @@ def _write_round_csv(round_index: int, samples: list[dict[str, float]], session:
     out_dir = _ensure_round_dir(session)
     csv_path = out_dir / f"round_{round_index}.csv"
     with csv_path.open("w", encoding="utf-8", newline="") as fp:
-        writer = csv.DictWriter(fp, fieldnames=list(_CSV_FIELDS))
+        writer = csv.DictWriter(fp, fieldnames=list(SERIAL_SAMPLE_FIELDS))
         writer.writeheader()
         for row in samples:
             writer.writerow(row)
     return csv_path
-
-
-def _format_prompt_text(system: str, user: str, round_index: int) -> str:
-    lines = [
-        "=" * 80,
-        f"ROUND {round_index} REQUEST PROMPT",
-        "=" * 80,
-        "",
-        "----- BEGIN role=system -----",
-        system,
-        "----- END role=system -----",
-        "",
-        "----- BEGIN role=user -----",
-        user,
-        "----- END role=user -----",
-        "",
-    ]
-    return "\n".join(lines)
-
 
 def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
     raw_payload = payload or {}
@@ -89,7 +61,9 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
     session = "serial" if session_raw == "serial" else "virtual"
     csv_path = _write_round_csv(round_index, samples, session)
 
-    plant_profile = _normalize_plant_profile(raw_payload.get("plant_profile"))
+    plant_profile = resolve_plant_profile(
+        {"plant_profile": raw_payload.get("plant_profile")}
+    )
     extra_ctx = raw_payload.get("prompt_context")
     prompt_context: dict[str, Any] = {}
     if isinstance(extra_ctx, Mapping):
@@ -99,7 +73,16 @@ def run_virtual_round(payload: Mapping[str, Any] | None = None) -> dict[str, Any
     prompt = build_full_prompt(
         samples=samples, history_text=history_text, prompt_context=prompt_context
     )
-    prompt_text = _format_prompt_text(prompt["system"], prompt["user"], round_index)
+    prompt_text = "\n".join(
+        [
+            "=" * 80,
+            f"ROUND {round_index} REQUEST PROMPT",
+            "=" * 80,
+            "",
+            format_prompt_messages(system=prompt["system"], user=prompt["user"]).strip(),
+            "",
+        ]
+    )
 
     llm_resp = request_once(system=prompt["system"], user=prompt["user"])
     raw_text = str(llm_resp.get("raw_text") or "")

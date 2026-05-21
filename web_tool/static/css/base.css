@@ -5,6 +5,10 @@
   --text: #f2f2f2;
   --muted: #9a9a9a;
   --hover: #ffffff;
+  --chart-target: #5ec8e8;
+  --chart-actual: #e8c27a;
+  --chart-error: #c89ef0;
+  --chart-legend: #e0e0e0;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -340,18 +344,6 @@ textarea {
   font-size: 0.72rem;
   padding: 0.25rem 0.45rem;
   color: var(--muted);
-}
-
-.log {
-  margin-top: 0.4rem;
-  max-height: 100px;
-  overflow: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  padding: 0.4rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-  white-space: pre-wrap;
 }
 
 @media (max-width: 900px) {

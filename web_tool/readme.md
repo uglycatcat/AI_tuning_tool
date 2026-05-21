@@ -28,7 +28,7 @@
 其他参数配置到根目录的config文件里面，包括数据流空默认None，校验位默认None，数据位数8,停止位数1，DTR默认关，RTS默认关
 
 点击启动后下发，类似于虚拟pid有周期 振幅 偏置 可调参数
-"debug_pid_ai_tuning start %周期 %振幅 %偏置"
+"debug_pid_ai_tuning start [period,amplitude,offset]"
 接下来会接收数据
 接收到的数据流字符串格式下是这样，需要检验格式才录入，
 "pid_tuning_param[timestamp,setpoint,input,pwm,error,p,i,d]"
@@ -37,7 +37,7 @@
 你无需显示接收到的完整数据
 其中error，setpoint，input绘制到图像中类似虚拟pid即可
 
-暂停功能只停止接收，解析以及图像更新，但是下位机继续工作
+暂停画面仅停止图像刷新；后台仍持续接收并解析串口数据，下位机继续工作
 
 和虚拟pid类似可以手动调整pid
 下发指令为

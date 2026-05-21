@@ -108,6 +108,69 @@ def optional_system(data: dict[str, Any]) -> str | None:
     return None
 
 
+def load_runtime_settings(
+    *,
+    include_system: bool = False,
+    include_retry: bool = False,
+    log_read_errors_to: TextIO | None = None,
+) -> dict[str, Any]:
+    """统一加载 Anthropic 运行配置，供 chat.py 与 client.py 复用。"""
+    data = read_root_config(log_read_errors_to=log_read_errors_to)
+    root = project_root()
+    out: dict[str, Any] = {}
+    out["api_key"] = os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip() or str(
+        data.get("LLM_API_KEY", "")
+    ).strip()
+    out["base_url"] = (
+        os.environ.get("ANTHROPIC_BASE_URL", "").strip()
+        or str(data.get("BASE_URL", "")).strip()
+        or DEFAULT_BASE_URL
+    ).rstrip("/")
+    out["model"] = (
+        os.environ.get("ANTHROPIC_MODEL", "").strip()
+        or str(data.get("MODEL", "")).strip()
+        or DEFAULT_MODEL
+    )
+    out["max_tokens"] = coerce_int(
+        os.environ.get("ANTHROPIC_MAX_TOKENS", "") or data.get("MAX_TOKENS"),
+        DEFAULT_MAX_TOKENS,
+        min_v=1,
+        max_v=200_000,
+    )
+    out["timeout"] = coerce_float(
+        os.environ.get("ANTHROPIC_TIMEOUT", "") or data.get("REQUEST_TIMEOUT_SECONDS"),
+        DEFAULT_TIMEOUT,
+        min_v=5.0,
+        max_v=600.0,
+    )
+    out["usage_log_path"] = resolve_usage_log_path(data, root=root)
+    out["input_price_per_mtok"] = optional_price(
+        os.environ.get("MODEL_INPUT_PRICE_PER_MTOK", "")
+        or data.get("MODEL_INPUT_PRICE_PER_MTOK")
+    )
+    out["output_price_per_mtok"] = optional_price(
+        os.environ.get("MODEL_OUTPUT_PRICE_PER_MTOK", "")
+        or data.get("MODEL_OUTPUT_PRICE_PER_MTOK")
+    )
+    if include_system:
+        out["system"] = optional_system(data)
+    if include_retry:
+        out["max_retries"] = coerce_int(
+            os.environ.get("ANTHROPIC_MAX_RETRIES", "") or data.get("REQUEST_MAX_RETRIES"),
+            3,
+            min_v=0,
+            max_v=15,
+        )
+        out["retry_base_delay_seconds"] = coerce_float(
+            os.environ.get("ANTHROPIC_RETRY_BASE_DELAY_SECONDS", "")
+            or data.get("REQUEST_RETRY_BASE_DELAY_SECONDS"),
+            0.75,
+            min_v=0.05,
+            max_v=60.0,
+        )
+    return out
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
@@ -258,6 +321,7 @@ __all__ = [
     "now_iso",
     "optional_price",
     "optional_system",
+    "load_runtime_settings",
     "project_root",
     "read_root_config",
     "resolve_usage_log_path",

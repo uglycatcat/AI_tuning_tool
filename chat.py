@@ -13,7 +13,6 @@ Anthropic Messages 兼容网关的终端多轮对话。
 from __future__ import annotations
 
 import json
-import os
 import sys
 import urllib.error
 import urllib.request
@@ -22,21 +21,11 @@ from pathlib import Path
 from typing import Any
 
 from tuning_tool.llm_settings import (
-    DEFAULT_BASE_URL,
-    DEFAULT_MAX_TOKENS,
-    DEFAULT_MODEL,
-    DEFAULT_TIMEOUT,
     USAGE_COUNT_KEYS,
     append_session_usage_log,
-    coerce_float,
-    coerce_int,
     extract_text_blocks,
+    load_runtime_settings,
     now_iso,
-    optional_price,
-    optional_system,
-    project_root,
-    read_root_config,
-    resolve_usage_log_path,
     usage_counts,
 )
 
@@ -60,43 +49,8 @@ class Settings:
 
 def load_settings() -> Settings:
     """合并 config.json 与环境变量，缺少密钥时退出进程。"""
-    data = read_root_config(log_read_errors_to=sys.stderr)
-    root = project_root()
-    api_key = os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip() or str(
-        data.get("LLM_API_KEY", "")
-    ).strip()
-    base_url = (
-        os.environ.get("ANTHROPIC_BASE_URL", "").strip()
-        or str(data.get("BASE_URL", "")).strip()
-        or DEFAULT_BASE_URL
-    ).rstrip("/")
-    model = (
-        os.environ.get("ANTHROPIC_MODEL", "").strip()
-        or str(data.get("MODEL", "")).strip()
-        or DEFAULT_MODEL
-    )
-    max_tokens = coerce_int(
-        os.environ.get("ANTHROPIC_MAX_TOKENS", "") or data.get("MAX_TOKENS"),
-        DEFAULT_MAX_TOKENS,
-        min_v=1,
-        max_v=200_000,
-    )
-    timeout = coerce_float(
-        os.environ.get("ANTHROPIC_TIMEOUT", "") or data.get("REQUEST_TIMEOUT_SECONDS"),
-        DEFAULT_TIMEOUT,
-        min_v=5.0,
-        max_v=600.0,
-    )
-    system = optional_system(data)
-    in_price = optional_price(
-        os.environ.get("MODEL_INPUT_PRICE_PER_MTOK", "")
-        or data.get("MODEL_INPUT_PRICE_PER_MTOK")
-    )
-    out_price = optional_price(
-        os.environ.get("MODEL_OUTPUT_PRICE_PER_MTOK", "")
-        or data.get("MODEL_OUTPUT_PRICE_PER_MTOK")
-    )
-    usage_log_path = resolve_usage_log_path(data, root=root)
+    cfg = load_runtime_settings(include_system=True, log_read_errors_to=sys.stderr)
+    api_key = str(cfg["api_key"])
     if not api_key:
         print(
             "未找到 API 密钥：在 config.json 设置 LLM_API_KEY，"
@@ -106,14 +60,14 @@ def load_settings() -> Settings:
         sys.exit(1)
     return Settings(
         api_key=api_key,
-        base_url=base_url,
-        model=model,
-        max_tokens=max_tokens,
-        system=system,
-        timeout=timeout,
-        usage_log_path=usage_log_path,
-        input_price_per_mtok=in_price,
-        output_price_per_mtok=out_price,
+        base_url=str(cfg["base_url"]),
+        model=str(cfg["model"]),
+        max_tokens=int(cfg["max_tokens"]),
+        system=cfg.get("system"),
+        timeout=float(cfg["timeout"]),
+        usage_log_path=cfg["usage_log_path"],
+        input_price_per_mtok=cfg.get("input_price_per_mtok"),
+        output_price_per_mtok=cfg.get("output_price_per_mtok"),
     )
 
 

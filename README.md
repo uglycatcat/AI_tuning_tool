@@ -46,3 +46,12 @@ python -m web_tool
 
 # Issues
 1. 接入tuning模式下重启或切换模式，可能有正在飞行的prompt等待request，收到request后右侧的文本框出现内容并且pid被修改。所以tuning模式下重启后可以等待一段时间（最多40s），或者直接重新启动程序。
+
+
+# 代码重构要求
+1. 注意prompt不允许直接出现在代码中，必须被放在tuning_tool/default_prompt.json中统一管理和被调用，删除多余无用的prompt
+2. 不能改变或者删除现在已有的功能和逻辑
+3. 重构代码过程中尽可能精简代码，减少复用
+4. 无需变动config文件以及protocol_pid_test.py文件
+5. 删除过去遗留的多余代码和无用代码甚至文件
+6. 重构整体代码朝着高内聚，低耦合的方向优化代码结构

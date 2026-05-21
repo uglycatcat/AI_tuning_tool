@@ -1,4 +1,4 @@
-"""从单轮样本列表计算指标并生成与参考工程一致的本轮数据正文（串口单环）。"""
+"""从单轮样本列表计算指标并根据 JSON 模板生成本轮数据正文。"""
 
 from __future__ import annotations
 
@@ -115,15 +115,26 @@ def _current_pid_from_samples(samples: List[Mapping[str, Any]]) -> Dict[str, flo
     }
 
 
+def _cfg(config: Mapping[str, Any], path: str) -> Any:
+    node: Any = config
+    for part in path.split("."):
+        if not isinstance(node, Mapping) or part not in node:
+            raise KeyError(f"missing prompt config key: {path}")
+        node = node[part]
+    return node
+
+
+def _fmt(template: str, **kwargs: Any) -> str:
+    return template.format(**{k: str(v) for k, v in kwargs.items()})
+
+
 def build_prompt_data(
     samples: List[Mapping[str, Any]],
+    config: Mapping[str, Any],
     *,
     plant_profile: str | None = None,
 ) -> str:
-    """
-    生成本轮「Current Status + 时间序列摘要」正文。
-    plant_profile 若为 virtual_tracking，会附加一段「时变给定」释意（与 metrics 一并呈现）。
-    """
+    """生成本轮「Current Status + 时间序列摘要」正文。"""
     if not samples:
         return ""
 
@@ -136,58 +147,83 @@ def build_prompt_data(
     step = max(1, len(all_data) // 30)
     sampled_data = all_data[::step]
 
-    lines: List[str] = []
-    lines.append("## Current Status")
+    pd = _cfg(config, "user.prompt_data")
+    lines: List[str] = [str(pd["section_current_status"])]
 
     if reference_tv:
         lines.append(
-            f"- 设定值轨迹 r(t): 时变 · 区间内 min={metrics.get('setpoint_min', 0):.4g}, "
-            f"max={metrics.get('setpoint_max', 0):.4g}, span≈{metrics.get('setpoint_span', 0):.4g}"
+            _fmt(
+                str(pd["line_setpoint_dynamic_range"]),
+                setpoint_min=f"{metrics.get('setpoint_min', 0):.4g}",
+                setpoint_max=f"{metrics.get('setpoint_max', 0):.4g}",
+                setpoint_span=f"{metrics.get('setpoint_span', 0):.4g}",
+            )
         )
         lines.append(
-            f"- 窗口末刻 r(t_last): {setpoint:.4g} （勿将整条窗口误判为恒定阶跃给定）"
+            _fmt(str(pd["line_setpoint_dynamic_last"]), setpoint_last=f"{setpoint:.4g}")
         )
     else:
-        lines.append(f"- 设定值 (Setpoint): {setpoint}")
+        lines.append(_fmt(str(pd["line_setpoint_static"]), setpoint=f"{setpoint}"))
 
     lines.append(
-        f"- 当前 PID: P={current_pid['p']}, I={current_pid['i']}, D={current_pid['d']}"
+        _fmt(
+            str(pd["line_pid"]),
+            p=current_pid["p"],
+            i=current_pid["i"],
+            d=current_pid["d"],
+        )
     )
-    lines.append(f"- 平均绝对误差 MAE(|e|): {metrics.get('avg_error', 0):.4f}")
-    lines.append(f"- 最大绝对误差: {metrics.get('max_error', 0):.4f}")
-    lines.append(f"- RMS(跟踪误差 e=r-y): {metrics.get('rms_tracking_error', 0):.4f}")
+    lines.append(_fmt(str(pd["line_mae"]), avg_error=f"{metrics.get('avg_error', 0):.4f}"))
+    lines.append(_fmt(str(pd["line_max_error"]), max_error=f"{metrics.get('max_error', 0):.4f}"))
+    lines.append(
+        _fmt(str(pd["line_rms"]), rms_tracking_error=f"{metrics.get('rms_tracking_error', 0):.4f}")
+    )
 
     if reference_tv:
         lines.append(
-            f"- 瞬时相对超调峰: max_t max(0,(y−r)/|r|)·100 ≈ "
-            f"{metrics.get('tracking_peak_overshoot_instant_pct', 0):.2f}%"
+            _fmt(
+                str(pd["line_peak_overshoot_dynamic"]),
+                tracking_peak_overshoot_instant_pct=(
+                    f"{metrics.get('tracking_peak_overshoot_instant_pct', 0):.2f}"
+                ),
+            )
         )
-        lines.append("- 定点阶跃语义超调%: （给定随时间变化，此项不作为主判据，已弱化）")
+        lines.append(str(pd["line_overshoot_note_dynamic"]))
 
-        lines.append("- 误差过零点次数（仅供参考，给定随时间变化时勿单独推断振荡）:")
-        lines.append(f"  count={metrics.get('zero_crossings', 0)}")
-    else:
-        lines.append(f"- 超调量(近似恒定给定): {metrics.get('overshoot', 0):.1f}%")
+        lines.append(str(pd["line_zero_cross_note_dynamic"]))
         lines.append(
-            f"- 震荡检测: 过零点 {metrics.get('zero_crossings', 0)} 次 "
-            f"(状态: {metrics.get('status', 'UNKNOWN')})"
+            _fmt(
+                str(pd["line_zero_cross_count_dynamic"]),
+                zero_crossings=metrics.get("zero_crossings", 0),
+            )
+        )
+    else:
+        lines.append(_fmt(str(pd["line_overshoot_static"]), overshoot=f"{metrics.get('overshoot', 0):.1f}"))
+        lines.append(
+            _fmt(
+                str(pd["line_oscillation_static"]),
+                zero_crossings=metrics.get("zero_crossings", 0),
+                status=metrics.get("status", "UNKNOWN"),
+            )
         )
 
-    lines.append(f"- 稳态误差估算(末段20%均值): {metrics.get('steady_state_error', 0):.4f}")
-    lines.append(f"- 状态摘要: {metrics.get('status', 'UNKNOWN')}")
+    lines.append(
+        _fmt(
+            str(pd["line_steady_state_error"]),
+            steady_state_error=f"{metrics.get('steady_state_error', 0):.4f}",
+        )
+    )
+    lines.append(_fmt(str(pd["line_status"]), status=metrics.get("status", "UNKNOWN")))
 
     if plant_profile == "virtual_tracking" or reference_tv:
         lines.append("")
-        lines.append(
-            "## 给定模式说明（自动）\n"
-            "- 本窗口数据表明给定 r(t) 随时间显著变化。调参目标是跟踪波形而非单点爬坡。\n"
-            "- 禁止仅用「看起来像正弦振荡」推断临界增益自持振荡；需结合能否跟上 r(t) 的 RMS/相位滞后。\n"
-            "- Phase 仍可分 P→I→D，但请以跟踪 RMS 下降 / 瞬时超调可控为主要优化信号。"
-        )
+        lines.append(str(pd["time_varying_note_title"]))
+        for bullet in list(pd["time_varying_note_bullets"]):
+            lines.append(str(bullet))
 
     lines.append("")
-    lines.append(f"## 时间序列数据摘要 (采样 {len(sampled_data)} 点):")
-    lines.append("SimTime(ms), Input, PWM, Error")
+    lines.append(_fmt(str(pd["timeseries_title"]), sample_count=len(sampled_data)))
+    lines.append(str(pd["timeseries_header"]))
 
     for d in sampled_data:
         lines.append(

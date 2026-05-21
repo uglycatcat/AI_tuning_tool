@@ -15,10 +15,6 @@ class SerialSendBody(BaseModel):
     line: str = ""
 
 
-class SerialIngestPauseBody(BaseModel):
-    paused: bool = False
-
-
 @router.get("/serial/ports")
 def serial_ports() -> dict[str, list[str]]:
     return {"ports": serial_bridge.list_ports()}
@@ -45,16 +41,6 @@ def serial_send(body: SerialSendBody) -> dict[str, object]:
     if r.get("status") != "ok":
         raise HTTPException(status_code=400, detail=str(r.get("message") or "发送失败"))
     return r
-
-
-@router.post("/serial/ingest-pause")
-def serial_ingest_pause(body: SerialIngestPauseBody) -> dict[str, object]:
-    return serial_bridge.set_ingest_paused(body.paused)
-
-
-@router.get("/serial/status")
-def serial_status() -> dict[str, object]:
-    return serial_bridge.status()
 
 
 @router.websocket("/serial/stream")

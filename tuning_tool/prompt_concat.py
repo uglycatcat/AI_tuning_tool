@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
-from .client import request_once
 from .metrics import build_prompt_data, compute_metrics
 from .response_parser import append_capture_to_output2_log
+from .prompt_display import format_prompt_messages
 
 _CONFIG_CACHE: Dict[str, Any] | None = None
 _CONFIG_PATH: str | None = None
@@ -31,6 +31,31 @@ def clear_prompt_config_cache() -> None:
     global _CONFIG_CACHE, _CONFIG_PATH
     _CONFIG_CACHE = None
     _CONFIG_PATH = None
+
+
+def _required_mapping(config: Mapping[str, Any], path: str) -> Mapping[str, Any]:
+    node: Any = config
+    for part in path.split("."):
+        if not isinstance(node, Mapping) or part not in node:
+            raise KeyError(f"missing prompt config key: {path}")
+        node = node[part]
+    if not isinstance(node, Mapping):
+        raise TypeError(f"prompt config key is not mapping: {path}")
+    return node
+
+
+def _required_str(config: Mapping[str, Any], path: str) -> str:
+    node: Any = config
+    for part in path.split("."):
+        if not isinstance(node, Mapping) or part not in node:
+            raise KeyError(f"missing prompt config key: {path}")
+        node = node[part]
+    if not isinstance(node, str):
+        raise TypeError(f"prompt config key is not string: {path}")
+    text = node.strip()
+    if not text:
+        raise ValueError(f"prompt config key is empty: {path}")
+    return text
 
 
 def build_system(config: Mapping[str, Any], *, plant_profile: str = "hardware_step") -> str:
@@ -82,12 +107,12 @@ def merge_prompt_context(
     if gh:
         merged["per_round_guardrail_hint"] = gh
 
-    if plant_profile == "virtual_tracking":
-        merged.setdefault("source", "virtual_pid_simulation")
-        merged.setdefault("tuning_style", "sim_tracking_exploratory")
-    else:
-        merged.setdefault("source", "serial_hardware")
-        merged.setdefault("tuning_style", "conservative_hardware_safe")
+    profiles = ctx_cfg.get("profile_defaults")
+    if isinstance(profiles, Mapping):
+        defaults = profiles.get(plant_profile)
+        if isinstance(defaults, Mapping):
+            for key, value in defaults.items():
+                merged.setdefault(str(key), value)
 
     if prompt_context:
         merged.update(dict(prompt_context))
@@ -125,7 +150,7 @@ def format_model_context(
     if not merged.get("serial_port"):
         merged["serial_port"] = "UNKNOWN"
 
-    title = str((config.get("user") or {}).get("section_title_model_context") or "## 模型上下文信息")
+    title = _required_str(config, "user.section_title_model_context")
     lines = [title]
     for key, value in merged.items():
         if value is None:
@@ -143,8 +168,8 @@ def _preference_block(summary: str, config: Mapping[str, Any]) -> str:
     summary = str(summary or "").strip()
     if not summary:
         return ""
-    pref = (config.get("user") or {}).get("preference_section") or {}
-    title = str(pref.get("title") or "## User Preferences")
+    pref = _required_mapping(config, "user.preference_section")
+    title = _required_str(config, "user.preference_section.title")
     lines_out = [title]
     for line in pref.get("lines") or []:
         lines_out.append(str(line).format(summary=summary))
@@ -152,31 +177,30 @@ def _preference_block(summary: str, config: Mapping[str, Any]) -> str:
 
 
 def _single_controller_block(config: Mapping[str, Any]) -> str:
-    u = config.get("user") or {}
-    title = str(u.get("section_title_single_controller") or "## 单控制器调参策略")
+    u = _required_mapping(config, "user")
+    title = _required_str(config, "user.section_title_single_controller")
     bullets = u.get("single_controller_bullets") or []
     parts = [title, *[str(b) for b in bullets]]
     return "\n".join(parts)
 
 
 def _round_task_block(config: Mapping[str, Any], *, plant_profile: str) -> str:
-    u = config.get("user") or {}
+    u = _required_mapping(config, "user")
     rt_block = (
         u.get("round_task_virtual_tracking")
         if plant_profile == "virtual_tracking"
         else None
     )
     rt = rt_block or u.get("round_task") or {}
-    section = str(u.get("section_title_round_task") or "## 本轮任务")
-    mode_label = str(rt.get("mode_label", "hardware"))
-    task_line = str(rt.get("task_line", ""))
-    compare_line = str(rt.get("compare_line", ""))
-    output_fields = str(
-        rt.get("output_fields", "thought_process、analysis_summary、tuning_action、p、i、d、status")
-    )
-    json_only = str(rt.get("json_only_line", "- 仅输出 JSON，包含字段：{output_fields}。")).format(
-        output_fields=output_fields
-    )
+    section = _required_str(config, "user.section_title_round_task")
+    mode_label = str(rt.get("mode_label", "")).strip()
+    task_line = str(rt.get("task_line", "")).strip()
+    compare_line = str(rt.get("compare_line", "")).strip()
+    output_fields = str(rt.get("output_fields", "")).strip()
+    json_only_tmpl = str(rt.get("json_only_line", "")).strip()
+    if not all((mode_label, task_line, compare_line, output_fields, json_only_tmpl)):
+        raise ValueError(f"round_task section incomplete for profile={plant_profile}")
+    json_only = json_only_tmpl.format(output_fields=output_fields)
     body = "\n".join(
         [
             f"- 当前模式：{mode_label}",
@@ -199,15 +223,11 @@ def build_user(
     serial_port: Optional[str] = None,
     include_context: bool = True,
 ) -> str:
-    u = config.get("user") or {}
-    defaults = u.get("defaults") or {}
-
-    history_block = (history_text or "").strip() or str(
-        defaults.get("empty_history") or "暂无历史调参记录，请将本轮视为第一轮。"
-    )
-    data_block = (prompt_data or "").strip() or str(
-        defaults.get("no_round_data") or "本轮未提供响应数据。"
-    )
+    defaults = _required_mapping(config, "user.defaults")
+    history_block = (history_text or "").strip() or str(defaults.get("empty_history", "")).strip()
+    data_block = (prompt_data or "").strip() or str(defaults.get("no_round_data", "")).strip()
+    if not history_block or not data_block:
+        raise ValueError("user.defaults.empty_history/no_round_data must be non-empty")
 
     sections: List[str] = [history_block, data_block]
 
@@ -240,7 +260,7 @@ def build_full_prompt(
     plant_profile = resolve_plant_profile(prompt_context)
     merged_ctx = merge_prompt_context(config, prompt_context, plant_profile=plant_profile)
     system = build_system(config, plant_profile=plant_profile)
-    prompt_data = build_prompt_data(samples, plant_profile=plant_profile)
+    prompt_data = build_prompt_data(samples, config, plant_profile=plant_profile)
     user = build_user(
         history_text,
         prompt_data,
@@ -299,13 +319,7 @@ def write_multi_round_prompt_log(
         blocks.append(f"ROUND {ridx} / {n}  —  FULL TEXT SENT TO MODEL (two logical messages)")
         blocks.append("=" * 80)
         blocks.append("")
-        blocks.append("----- BEGIN role=system -----")
-        blocks.append(system)
-        blocks.append("----- END role=system -----")
-        blocks.append("")
-        blocks.append("----- BEGIN role=user -----")
-        blocks.append(user)
-        blocks.append("----- END role=user -----")
+        blocks.append(format_prompt_messages(system=system, user=user).strip())
         blocks.append("")
 
     out_path.write_text("\n".join(blocks).lstrip("\n"), encoding="utf-8")
@@ -353,16 +367,12 @@ def run_one_shot_ai_pipeline(
         "ONE-SHOT REQUEST PROMPT",
         "=" * 80,
         "",
-        "----- BEGIN role=system -----",
-        prompt["system"],
-        "----- END role=system -----",
-        "",
-        "----- BEGIN role=user -----",
-        prompt["user"],
-        "----- END role=user -----",
+        format_prompt_messages(system=prompt["system"], user=prompt["user"]).strip(),
         "",
     ]
     output_log.write_text("\n".join(blocks), encoding="utf-8")
+
+    from .client import request_once
 
     resp = request_once(system=prompt["system"], user=prompt["user"])
     output2_log = append_capture_to_output2_log(
@@ -400,8 +410,7 @@ if __name__ == "__main__":
 
     if not _test_data.is_file():
         print(
-            f"[ERROR] Missing {_test_data.name}. Run first:\n"
-            f"  python3 -m tuning_tool.generate_test_data",
+            f"[ERROR] Missing {_test_data.name}. Please prepare a test_data.json in tuning_tool/ first.",
             flush=True,
         )
         raise SystemExit(1)

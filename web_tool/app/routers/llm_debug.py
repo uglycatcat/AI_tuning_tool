@@ -8,15 +8,7 @@ from web_tool.services.tuning_bridge import run_virtual_round
 
 router = APIRouter(tags=["llm_debug"])
 
-_store: dict[str, str] = {
-    "last_prompt": "[stub] 尚未接入真实流水线。",
-    "last_response": "[stub] 无响应。",
-}
-
-
-class LlmDebugBody(BaseModel):
-    prompt: str | None = None
-    response: str | None = None
+_store: dict[str, str] = {"last_prompt": "", "last_response": ""}
 
 
 class VirtualRoundBody(BaseModel):
@@ -31,15 +23,6 @@ class VirtualRoundBody(BaseModel):
 
 @router.get("/debug/llm")
 def llm_debug_get() -> dict[str, str]:
-    return {"prompt": _store["last_prompt"], "response": _store["last_response"]}
-
-
-@router.post("/debug/llm")
-def llm_debug_set(body: LlmDebugBody) -> dict[str, str]:
-    if body.prompt is not None:
-        _store["last_prompt"] = body.prompt
-    if body.response is not None:
-        _store["last_response"] = body.response
     return {"prompt": _store["last_prompt"], "response": _store["last_response"]}
 
 
