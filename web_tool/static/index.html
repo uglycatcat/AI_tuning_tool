@@ -101,7 +101,7 @@
               <input type="text" id="serial-port-input" list="serial-port-list" value="/dev/ttyUSB0" autocomplete="off" />
             </label>
             <datalist id="serial-port-list"></datalist>
-            <button type="button" class="btn-primary" id="btn-serial-refresh">刷新列表</button>
+            <button type="button" class="btn-primary" id="btn-serial-refresh">刷新串口列表</button>
           </div>
           <div class="field-row">
             <label>波特率</label>
@@ -133,12 +133,12 @@
             <label>D<input type="number" id="sp-d" step="0.001" value="0" /></label>
           </div>
           <div class="btn-row">
-            <button type="button" class="btn-primary" id="btn-serial-connect">连接</button>
-            <button type="button" class="btn-primary" id="btn-serial-disconnect">断开</button>
-            <button type="button" class="btn-primary" id="btn-serial-start">启动</button>
-            <button type="button" class="btn-primary" id="btn-serial-pause">暂停</button>
-            <button type="button" class="btn-primary" id="btn-serial-restart">重启</button>
-            <button type="button" class="btn-primary" id="btn-serial-close">关闭</button>
+            <button type="button" class="btn-primary" id="btn-serial-connect">连接设备</button>
+            <button type="button" class="btn-primary" id="btn-serial-disconnect">断开设备</button>
+            <button type="button" class="btn-primary" id="btn-serial-start">启动设备</button>
+            <button type="button" class="btn-primary" id="btn-serial-pause">暂停画面</button>
+            <button type="button" class="btn-primary" id="btn-serial-restart">重启设备</button>
+            <button type="button" class="btn-primary" id="btn-serial-close">停止设备</button>
           </div>
           <p class="status" id="serial-status">未连接</p>
         </div>

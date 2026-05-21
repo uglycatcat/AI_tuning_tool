@@ -144,11 +144,6 @@ def _reader_loop() -> None:
             line = raw.decode("utf-8", errors="replace")
         except Exception:
             continue
-        paused = False
-        with _lock:
-            paused = _ingest_paused
-        if paused:
-            continue
         parsed = parse_pid_tuning_line(line)
         if parsed is None:
             _enqueue({"type": "parse_error"})
