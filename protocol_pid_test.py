@@ -28,7 +28,7 @@
    `debug_pid_ai_tuning stop`
 
 下位机 -> 上位机（本脚本发送）：
-- `pid_tuning_param[timestamp,setpoint,input,pwm,error,p,i,d]\\n`
+- `pid_tuning_param: timestamp,setpoint,input,pwm,error,p,i,d\\n`
 
 字段说明建议
 ------------
@@ -44,7 +44,7 @@
 你只需要实现下面这条主循环就能和上位机对齐调试：
 1) 循环读取串口命令；
 2) 命令命中 `start/set_pid/set_param/stop` 时更新内部状态；
-3) 运行中按固定周期输出 `pid_tuning_param[...]`；
+3) 运行中按固定周期输出 `pid_tuning_param: ...`；
 4) 停止后不再发送数据（直到下一次 `start`）。
 """
 
@@ -74,7 +74,7 @@ SERIAL_WRITE_TIMEOUT_S = 2.0
 VERBOSE = True
 
 # 发送频率（建议 100~1000Hz）
-SIM_DT = 0.002  # 500Hz
+SIM_DT = 0.005  # 200Hz
 
 # 默认目标曲线参数（被 start/set_param 覆盖）
 DEFAULT_PERIOD = 4.0
@@ -290,7 +290,7 @@ class FakeLowerController:
                     kd,
                 )
             )
-            return f"pid_tuning_param[{inner}]\n"
+            return f"pid_tuning_param: {inner}\n"
 
 
 def _reader_loop(ser: serial.Serial, ctrl: FakeLowerController) -> None:

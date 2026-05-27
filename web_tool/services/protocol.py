@@ -1,18 +1,14 @@
 from __future__ import annotations
 
+import re
 from typing import Mapping
 
 SERIAL_SAMPLE_FIELDS = ("timestamp", "setpoint", "input", "pwm", "error", "p", "i", "d")
-PID_TUNING_PREFIX = "pid_tuning_param["
-PID_TUNING_SUFFIX = "]"
+PID_TUNING_RE = re.compile(r"^\s*pid_tuning_param\s*:\s*(.+?)\s*$", re.IGNORECASE)
 
 
-def parse_pid_tuning_line(line: str) -> dict[str, float] | None:
-    s = line.strip()
-    if not (s.startswith(PID_TUNING_PREFIX) and s.endswith(PID_TUNING_SUFFIX)):
-        return None
-    inner = s[len(PID_TUNING_PREFIX) : -len(PID_TUNING_SUFFIX)]
-    parts = inner.split(",")
+def _split_payload(payload: str) -> dict[str, float] | None:
+    parts = payload.split(",")
     if len(parts) != len(SERIAL_SAMPLE_FIELDS):
         return None
     out: dict[str, float] = {}
@@ -22,6 +18,14 @@ def parse_pid_tuning_line(line: str) -> dict[str, float] | None:
         except ValueError:
             return None
     return out
+
+
+def parse_pid_tuning_line(line: str) -> dict[str, float] | None:
+    s = line.strip()
+    match = PID_TUNING_RE.match(s)
+    if match is None:
+        return None
+    return _split_payload(match.group(1))
 
 
 def normalize_sample_row(row: Mapping[str, object]) -> dict[str, float]:
@@ -36,8 +40,7 @@ def normalize_sample_row(row: Mapping[str, object]) -> dict[str, float]:
 
 __all__ = [
     "SERIAL_SAMPLE_FIELDS",
-    "PID_TUNING_PREFIX",
-    "PID_TUNING_SUFFIX",
+    "PID_TUNING_RE",
     "parse_pid_tuning_line",
     "normalize_sample_row",
 ]
