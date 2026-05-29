@@ -48,8 +48,14 @@ async def serial_stream(websocket: WebSocket) -> None:
     await websocket.accept()
     try:
         while True:
-            ev = await asyncio.to_thread(serial_bridge.pop_event, 0.15)
-            if ev is not None:
-                await websocket.send_text(json.dumps(ev, ensure_ascii=False))
+            batch = await asyncio.to_thread(serial_bridge.pop_events_batch, 48, 0.15)
+            if not batch:
+                continue
+            if len(batch) == 1:
+                await websocket.send_text(json.dumps(batch[0], ensure_ascii=False))
+            else:
+                await websocket.send_text(
+                    json.dumps({"type": "batch", "events": batch}, ensure_ascii=False)
+                )
     except WebSocketDisconnect:
         pass

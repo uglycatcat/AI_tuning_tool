@@ -14,7 +14,7 @@ _lock = threading.Lock()
 _ser: serial.Serial | None = None
 _reader: threading.Thread | None = None
 _stop = threading.Event()
-_out_q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=512)
+_out_q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=2048)
 _ts_scale: float | None = None
 
 
@@ -241,3 +241,19 @@ def pop_event(timeout: float) -> dict[str, Any] | None:
         return _out_q.get(timeout=timeout)
     except queue.Empty:
         return None
+
+
+def pop_events_batch(max_items: int, timeout: float) -> list[dict[str, Any]]:
+    """取一批事件，减少 WebSocket 往返与前端 JSON 解析次数。"""
+    limit = max(1, int(max_items))
+    batch: list[dict[str, Any]] = []
+    first = pop_event(timeout)
+    if first is None:
+        return batch
+    batch.append(first)
+    while len(batch) < limit:
+        try:
+            batch.append(_out_q.get_nowait())
+        except queue.Empty:
+            break
+    return batch

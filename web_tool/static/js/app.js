@@ -2,7 +2,12 @@
   const $ = (id) => document.getElementById(id);
 
   const WINDOW_S = 10;
-  const SERIAL_RENDER_INTERVAL_MS = 33;
+  /** 串口曲线显示最高刷新率（降采样入缓冲，调参仍用全量样本） */
+  const SERIAL_CHART_MIN_DT = 1 / 60;
+  /** 状态栏刷新间隔，避免高频 DOM 更新阻塞主线程 */
+  const SERIAL_STATUS_INTERVAL_MS = 200;
+  /** 串口缓冲裁剪余量 (s) */
+  const SERIAL_BUFFER_MARGIN_S = 0.15;
   /** 仿真步长 (s)，100Hz */
   const SIM_DT = 0.01;
   /** 速度环时间常数 (s)：实际速度一阶跟上 PID 给出的速度指令 */
@@ -27,8 +32,11 @@
   let serialAwaitingSample = false;
   let spPidTimer = 0;
   let spParamTimer = 0;
-  let serialLastRenderAtMs = 0;
   let serialLastSample = null;
+  let serialLastChartSampleT = -Infinity;
+  let serialLastStatusAtMs = 0;
+  let serialRafId = 0;
+  let bufTrimHead = 0;
   let chart;
   /** @type {number} */
   let simTimerId = 0;
@@ -211,17 +219,39 @@
     return offset + amp * Math.sin((2 * Math.PI * t) / T);
   };
 
-  const trimBuffers = (tNow) => {
+  const trimBuffersVirtual = (tNow) => {
     const tMin = tNow - WINDOW_S - 2 * SIM_DT;
     while (bufTarget.length && bufTarget[0].x < tMin) bufTarget.shift();
     while (bufActual.length && bufActual[0].x < tMin) bufActual.shift();
     while (bufError.length && bufError[0].x < tMin) bufError.shift();
   };
 
+  /** 串口高频数据：用 head 索引 + 批量 splice，避免每条消息 O(n) shift */
+  const trimBuffersSerial = (tNow) => {
+    const tMin = tNow - WINDOW_S - SERIAL_BUFFER_MARGIN_S;
+    const n = bufTarget.length;
+    let i = bufTrimHead;
+    while (i < n && bufTarget[i].x < tMin) i += 1;
+    bufTrimHead = i;
+    if (bufTrimHead > 400) {
+      bufTarget.splice(0, bufTrimHead);
+      bufActual.splice(0, bufTrimHead);
+      bufError.splice(0, bufTrimHead);
+      bufTrimHead = 0;
+    }
+  };
+
+  const trimBuffers = (tNow) => {
+    if (mode === "serial") trimBuffersSerial(tNow);
+    else trimBuffersVirtual(tNow);
+  };
+
   const clearChartBuffers = () => {
     bufTarget.length = 0;
     bufActual.length = 0;
     bufError.length = 0;
+    bufTrimHead = 0;
+    serialLastChartSampleT = -Infinity;
   };
 
   const setChartRange = (min, max) => {
@@ -356,17 +386,56 @@
     resetChartFrame(undefined, undefined);
   };
 
-  const renderSerialFrame = (t, force = false) => {
+  const cancelSerialRender = () => {
+    if (serialRafId) {
+      cancelAnimationFrame(serialRafId);
+      serialRafId = 0;
+    }
+  };
+
+  const renderSerialFrame = (t) => {
     if (!Number.isFinite(Number(t))) return false;
-    const now = performance.now();
-    if (!force && now - serialLastRenderAtMs < SERIAL_RENDER_INTERVAL_MS) return false;
     ensureChart();
     syncChartBuffers();
     setChartWindow(Number(t));
-    chart.update();
+    chart.update("none");
     updateChartStats();
-    serialLastRenderAtMs = now;
     return true;
+  };
+
+  const flushSerialUi = () => {
+    if (mode !== "serial" || serialDisplayPaused) return;
+    const sample = serialLastSample;
+    if (!sample || !Number.isFinite(Number(sample.t))) return;
+    renderSerialFrame(Number(sample.t));
+    const now = performance.now();
+    if (now - serialLastStatusAtMs >= SERIAL_STATUS_INTERVAL_MS) {
+      setSerialStatus(buildSerialLiveStatus(sample));
+      serialLastStatusAtMs = now;
+    }
+  };
+
+  const scheduleSerialRender = () => {
+    if (serialRafId) return;
+    serialRafId = requestAnimationFrame(() => {
+      serialRafId = 0;
+      flushSerialUi();
+    });
+  };
+
+  const appendSerialChartSample = (t, setpoint, input, err) => {
+    if (!bufTarget.length || t - serialLastChartSampleT >= SERIAL_CHART_MIN_DT) {
+      bufTarget.push({ x: t, y: setpoint });
+      bufActual.push({ x: t, y: input });
+      bufError.push({ x: t, y: err });
+      serialLastChartSampleT = t;
+      trimBuffersSerial(t);
+      return;
+    }
+    const last = bufTarget.length - 1;
+    bufTarget[last] = { x: t, y: setpoint };
+    bufActual[last] = { x: t, y: input };
+    bufError[last] = { x: t, y: err };
   };
 
   const simReset = () => {
@@ -423,7 +492,7 @@
     bufTarget.push({ x: simT, y: r });
     bufActual.push({ x: simT, y: simY });
     bufError.push({ x: simT, y: ePlot });
-    trimBuffers(simT);
+    trimBuffersVirtual(simT);
     simT += dt;
   };
 
@@ -708,6 +777,7 @@
   };
 
   const stopSerialSession = async () => {
+    cancelSerialRender();
     closeSerialWebSocket();
     serialConnected = false;
     serialDisplayPaused = false;
@@ -738,6 +808,31 @@
     };
   };
 
+  const processSerialWsEvent = (data) => {
+    if (!data || typeof data !== "object") return;
+    if (data.type === "sample") {
+      const t = Number(data.t);
+      const setpoint = Number(data.setpoint);
+      const input = Number(data.input);
+      const err = Number(data.error);
+      if (![t, setpoint, input, err].every((x) => Number.isFinite(x))) return;
+      serialLastSample = data;
+      appendSerialChartSample(t, setpoint, input, err);
+      if (serialAwaitingSample) {
+        serialAwaitingSample = false;
+      }
+      $("chart-hint").textContent = `串口 · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
+      if (!serialDisplayPaused) {
+        scheduleSerialRender();
+      }
+      void tickSerialTuning(data);
+    } else if (data.type === "parse_error") {
+      setSerialStatus("数据解析失败");
+    } else if (data.type === "io_error") {
+      setSerialStatus(String(data.message || "串口读取异常"));
+    }
+  };
+
   const handleSerialWsMessage = (ev) => {
     if (mode !== "serial") return;
     let data;
@@ -746,33 +841,13 @@
     } catch {
       return;
     }
-    if (data.type === "sample") {
-      const t = Number(data.t);
-      const setpoint = Number(data.setpoint);
-      const input = Number(data.input);
-      const err = Number(data.error);
-      if (![t, setpoint, input, err].every((x) => Number.isFinite(x))) return;
-      serialLastSample = data;
-      bufTarget.push({ x: t, y: setpoint });
-      bufActual.push({ x: t, y: input });
-      bufError.push({ x: t, y: err });
-      trimBuffers(t);
-      if (!serialDisplayPaused) {
-        renderSerialFrame(t);
+    if (data.type === "batch" && Array.isArray(data.events)) {
+      for (const item of data.events) {
+        processSerialWsEvent(item);
       }
-      if (serialAwaitingSample) {
-        serialAwaitingSample = false;
-      }
-      $("chart-hint").textContent = `串口 · 三曲线 · 双纵轴 · 窗 ${WINDOW_S}s`;
-      if (!serialDisplayPaused) {
-        setSerialStatus(buildSerialLiveStatus(data));
-      }
-      void tickSerialTuning(data);
-    } else if (data.type === "parse_error") {
-      setSerialStatus("数据解析失败");
-    } else if (data.type === "io_error") {
-      setSerialStatus(String(data.message || "串口读取异常"));
+      return;
     }
+    processSerialWsEvent(data);
   };
 
   const scheduleSerialPidSend = () => {
@@ -1056,28 +1131,31 @@
       if (serialDisplayPaused) {
         setSerialStatus("画面已暂停（后台仍在接收、处理与调参）");
       } else if (serialLastSample && Number.isFinite(Number(serialLastSample.t))) {
-        renderSerialFrame(Number(serialLastSample.t), true);
+        flushSerialUi();
         setSerialStatus(buildSerialLiveStatus(serialLastSample));
       } else {
         setSerialStatus("已继续画面");
       }
     });
 
-    $("btn-serial-close").addEventListener("click", async () => {
+    $("btn-serial-close").addEventListener("click", () => {
       if (mode !== "serial" || !serialConnected) {
         setSerialStatus("请先连接串口");
         return;
       }
-      try {
-        await sendSerialLine(SERIAL_CMD.stop);
-        serialDeviceRunning = false;
-        serialDisplayPaused = false;
-        serialAwaitingSample = false;
-        updateSerialButtons();
-        setSerialStatus("已发送停止指令（下位机应停止上报）");
-      } catch (e) {
-        setSerialStatus(`停止指令失败：${e.message}`);
-      }
+      serialDeviceRunning = false;
+      serialDisplayPaused = false;
+      serialAwaitingSample = false;
+      cancelSerialRender();
+      updateSerialButtons();
+      setSerialStatus("正在发送停止指令…");
+      void sendSerialLine(SERIAL_CMD.stop)
+        .then(() => {
+          setSerialStatus("已发送停止指令（下位机应停止上报）");
+        })
+        .catch((e) => {
+          setSerialStatus(`停止指令失败：${e.message}`);
+        });
     });
 
     ["sp-p", "sp-i", "sp-d"].forEach((id) => {
