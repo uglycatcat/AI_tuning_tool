@@ -18,8 +18,9 @@
 协议速查（严格新协议）
 ----------------------
 上位机 -> 下位机（本脚本接收）：
-1. 启动并设置目标曲线
-   `debug_pid_ai_tuning start [period,amplitude,offset]`
+1. 启动（使用下位机当前目标曲线与 PID，无参）
+   `debug_pid_ai_tuning start`
+   兼容旧格式：`debug_pid_ai_tuning start [period,amplitude,offset]`
 2. 修改 PID
    `set_pid[p,i,d]`
 3. 修改目标曲线参数
@@ -105,6 +106,7 @@ TORQUE_NOISE_SIGMA = 0.45
 MEASURE_NOISE_SIGMA = 0.08
 NOISE_AR_ALPHA = 0.90
 
+START_BARE_RE = re.compile(r"^\s*debug_pid_ai_tuning\s+start\s*$", re.IGNORECASE)
 START_RE = re.compile(
     r"^\s*debug_pid_ai_tuning\s+start\s*\[\s*([^,\]]+)\s*,\s*([^,\]]+)\s*,\s*([^\]]+)\s*\]\s*$",
     re.IGNORECASE,
@@ -190,6 +192,16 @@ class FakeLowerController:
                     with self._lock:
                         self._running = False
                     self._log("[CMD] stop")
+                    continue
+
+                if START_BARE_RE.match(line):
+                    with self._lock:
+                        period, amp, off = self._period, self._amp, self._offset
+                        self._reset_plant_unlocked()
+                        self._running = True
+                    self._log(
+                        f"[CMD] start (defaults) period={period} amp={amp} offset={off}"
+                    )
                     continue
 
                 start_cmd = _parse_triplet(START_RE, line)

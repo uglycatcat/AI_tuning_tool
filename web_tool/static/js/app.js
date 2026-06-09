@@ -18,7 +18,7 @@
   let tuningRoundDurationS = 4.0;
   const SERIAL_CMD = {
     stop: "debug_pid_ai_tuning stop",
-    start: (period, amp, off) => `debug_pid_ai_tuning start [${period},${amp},${off}]`,
+    start: "debug_pid_ai_tuning start",
     setPid: (p, i, d) => `set_pid[${p},${i},${d}]`,
     setParam: (period, amp, off) => `set_param[${period},${amp},${off}]`,
   };
@@ -30,6 +30,8 @@
   let serialDisplayPaused = false;
   let serialDeviceRunning = false;
   let serialAwaitingSample = false;
+  /** 启动设备后，待把下位机回报的首帧 PID 同步到 sp-p/i/d 控件（仅一次） */
+  let serialPidSyncPending = false;
   let spPidTimer = 0;
   let spParamTimer = 0;
   let serialLastSample = null;
@@ -506,6 +508,21 @@
   const setPidInputs = (pid) => setPidInputsByPrefix("vp", pid);
   const setSpPidInputs = (pid) => setPidInputsByPrefix("sp", pid);
 
+  /**
+   * 启动设备后，把下位机首帧回报的 PID 同步到串口面板的 sp-p/i/d 控件。
+   * 仅在 serialPidSyncPending 为真且本帧 PID 至少有一个有效时执行，执行后清除标志。
+   * 直接写 input.value 不会触发 change 事件，因此不会回发 set_pid，避免回路。
+   */
+  const trySyncSerialPidFromSample = (data) => {
+    if (!serialPidSyncPending || !data) return;
+    const p = Number(data.p);
+    const i = Number(data.i);
+    const d = Number(data.d);
+    if (![p, i, d].some((x) => Number.isFinite(x))) return;
+    setSpPidInputs({ p, i, d });
+    serialPidSyncPending = false;
+  };
+
   const buildSampleRow = () => {
     const nowMs = simT * 1000;
     const setpoint = bufTarget.length ? bufTarget[bufTarget.length - 1].y : 0;
@@ -783,6 +800,7 @@
     serialDisplayPaused = false;
     serialDeviceRunning = false;
     serialAwaitingSample = false;
+    serialPidSyncPending = false;
     serialLastSample = null;
     tuningState.serialSessionGeneration += 1;
     tuningState.busy = false;
@@ -817,6 +835,7 @@
       const err = Number(data.error);
       if (![t, setpoint, input, err].every((x) => Number.isFinite(x))) return;
       serialLastSample = data;
+      trySyncSerialPidFromSample(data);
       appendSerialChartSample(t, setpoint, input, err);
       if (serialAwaitingSample) {
         serialAwaitingSample = false;
@@ -937,6 +956,7 @@
     serialDeviceRunning = false;
     serialDisplayPaused = false;
     serialAwaitingSample = false;
+    serialPidSyncPending = false;
     serialLastSample = null;
     $("vp-status").textContent = "已停止";
     clearPagedLogs();
@@ -1101,18 +1121,16 @@
         setSerialStatus("请先连接串口");
         return;
       }
-      const period = readFloat("sp-period", 4);
-      const amp = readFloat("sp-amp", 10);
-      const off = readFloat("sp-offset", 50);
       try {
         tuningState.serialSessionGeneration += 1;
         resetTuningRuntime();
-        await sendSerialLine(SERIAL_CMD.start(period, amp, off));
+        await sendSerialLine(SERIAL_CMD.start);
         clearChartBuffers();
         serialLastSample = null;
         serialDeviceRunning = true;
         serialDisplayPaused = false;
         serialAwaitingSample = true;
+        serialPidSyncPending = true;
         resetChartFrame(undefined, undefined);
         updateSerialButtons();
         setSerialStatus("没有收到数据");
@@ -1146,6 +1164,7 @@
       serialDeviceRunning = false;
       serialDisplayPaused = false;
       serialAwaitingSample = false;
+      serialPidSyncPending = false;
       cancelSerialRender();
       updateSerialButtons();
       setSerialStatus("正在发送停止指令…");
